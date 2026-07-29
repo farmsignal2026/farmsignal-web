@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  /* Color palette ported from RS_Cane_Monitoring_S1.html root CSS
+     variables (the g, a, r, b, p, t, and n prefixed variables), so the
+     Tailwind built-in green/amber/red/blue/purple/teal/neutral scales
+     resolve to the exact shades already used across the dashboard,
+     instead of the Tailwind stock palette. Only the shades that exist in
+     the source are overridden; the rest of each scale falls back to the
+     Tailwind default. */
+  --color-green-50: #f0faf4;
+  --color-green-100: #d4f0e0;
+  --color-green-200: #a8dfc0;
+  --color-green-400: #22a65a;
+  --color-green-600: #157a40;
+  --color-green-800: #0d5229;
+
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fde68a;
+  --color-amber-400: #f59e0b;
+  --color-amber-600: #b45309;
+  --color-amber-800: #78350f;
+
+  --color-red-50: #fef2f2;
+  --color-red-100: #fecaca;
+  --color-red-400: #f87171;
+  --color-red-600: #dc2626;
+  --color-red-800: #7f1d1d;
+
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #bfdbfe;
+  --color-blue-400: #3b82f6;
+  --color-blue-600: #1d4ed8;
+  --color-blue-800: #1e3a8a;
+
+  --color-purple-50: #f5f3ff;
+  --color-purple-100: #ede9fe;
+  --color-purple-400: #8b5cf6;
+  --color-purple-600: #7c3aed;
+
+  --color-teal-50: #f0fdfa;
+  --color-teal-100: #ccfbf1;
+  --color-teal-400: #2dd4bf;
+  --color-teal-600: #0d9488;
+
+  --color-neutral-50: #f9fafb;
+  --color-neutral-100: #f3f4f6;
+  --color-neutral-200: #e5e7eb;
+  --color-neutral-300: #d1d5db;
+  --color-neutral-400: #9ca3af;
+  --color-neutral-500: #6b7280;
+  --color-neutral-600: #4b5563;
+  --color-neutral-700: #374151;
+  --color-neutral-800: #1f2937;
+  --color-neutral-900: #111827;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --font-sans: "DM Sans", sans-serif;
+  --font-mono: "DM Mono", monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #eef0f3;
+  color: var(--color-neutral-800);
+  font-family: var(--font-sans);
+}

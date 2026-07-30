@@ -13,7 +13,7 @@ export const TABS: { key: TabKey; label: string }[] = [
   { key: 'trend', label: '📊 Health Trend' },
   { key: 'compare', label: '⚖️ Compare' },
   { key: 'scoutAnalytics', label: '🔍 Scout Analytics' },
-  { key: 'summary', label: '📈 Stage summary' },
+  { key: 'summary', label: '📈 Health Summary' },
   { key: 'cards', label: '🗂 Field cards' },
   { key: 'table', label: '📋 Table' },
   { key: 'chart', label: 'NDVI Trend' },

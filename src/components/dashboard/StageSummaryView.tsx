@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
+import { classifyHistory } from '../../features/fields/classifyHistory'
 import { stages } from '../../features/fields/growthStage'
 import type { HealthStatus } from '../../features/fields/growthStage'
 import { HEALTH_COLOR_HEX, HEALTH_LABEL } from '../../features/fields/badgeStyles'
@@ -59,6 +60,15 @@ export function StageSummaryView({ fields, geoByCode, onViewPlotInCards }: Stage
       .slice(0, 10)
   }, [fields, geoByCode])
 
+  const consistentGood = useMemo(() => {
+    return fields
+      .filter((f) => f.healthStatus === 'good')
+      .map((f) => ({ field: f, streak: computeGoodStreak(f, geoByCode[f.code]) }))
+      .filter(({ streak }) => streak > 0)
+      .sort((a, b) => b.streak - a.streak)
+      .slice(0, 10)
+  }, [fields, geoByCode])
+
   return (
     <div className="space-y-6 p-4">
       <SummaryCard title="Crop Stage Distribution">
@@ -69,49 +79,103 @@ export function StageSummaryView({ fields, geoByCode, onViewPlotInCards }: Stage
         <StackedBar segments={healthSegments} total={fields.length} />
       </SummaryCard>
 
-      <SummaryCard title="Persistent Issues — longest Need-Attention streaks">
-        {persistentIssues.length === 0 ? (
-          <div className="py-2 text-xs text-neutral-400">No plots currently in Need Attention.</div>
-        ) : (
-          <div className="divide-y divide-neutral-100">
-            {persistentIssues.map(({ field, streak }) => {
-              const geo = geoByCode[field.code]
-              const isSerious = field.healthStatus === 'serious'
-              return (
-                <button
-                  key={field.code}
-                  type="button"
-                  onClick={() => onViewPlotInCards(field.code)}
-                  className="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-neutral-50"
-                  title="Open this plot in Field cards"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-semibold text-neutral-700">{field.name}</div>
-                    <div className="truncate text-[10px] text-neutral-400">
-                      {field.code}
-                      {field.division ? ` · ${field.division}` : ''}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                        isSerious ? 'bg-red-50 text-red-600' : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {streak} obs{isSerious ? ' · serious' : ''}
-                    </span>
-                    <div className="mt-0.5 text-[10px] text-neutral-400">
-                      NDVI {geo?.ndvi != null ? geo.ndvi.toFixed(2) : '--'}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </SummaryCard>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <SummaryCard title="Persistent Issues — longest Need-Attention streaks">
+          <StreakList
+            items={persistentIssues}
+            geoByCode={geoByCode}
+            onViewPlotInCards={onViewPlotInCards}
+            emptyMessage="No plots currently in Need Attention."
+            badgeClass={({ field }) => (field.healthStatus === 'serious' ? 'bg-red-50 text-red-600' : 'bg-amber-100 text-amber-800')}
+            badgeText={({ field, streak }) => `${streak} obs${field.healthStatus === 'serious' ? ' · serious' : ''}`}
+          />
+        </SummaryCard>
+
+        <SummaryCard title="Consistent Good Performance — longest Good streaks">
+          <StreakList
+            items={consistentGood}
+            geoByCode={geoByCode}
+            onViewPlotInCards={onViewPlotInCards}
+            emptyMessage="No plots currently on a Good streak."
+            badgeClass={() => 'bg-green-50 text-green-600'}
+            badgeText={({ streak }) => `${streak} obs · good`}
+          />
+        </SummaryCard>
+      </div>
     </div>
   )
+}
+
+interface StreakItem {
+  field: Field
+  streak: number
+}
+
+function StreakList({
+  items,
+  geoByCode,
+  onViewPlotInCards,
+  emptyMessage,
+  badgeClass,
+  badgeText,
+}: {
+  items: StreakItem[]
+  geoByCode: Record<string, FieldGeo>
+  onViewPlotInCards: (plotCode: string) => void
+  emptyMessage: string
+  badgeClass: (item: StreakItem) => string
+  badgeText: (item: StreakItem) => string
+}) {
+  if (items.length === 0) {
+    return <div className="py-2 text-xs text-neutral-400">{emptyMessage}</div>
+  }
+  return (
+    <div className="divide-y divide-neutral-100">
+      {items.map((item) => {
+        const { field } = item
+        const geo = geoByCode[field.code]
+        return (
+          <button
+            key={field.code}
+            type="button"
+            onClick={() => onViewPlotInCards(field.code)}
+            className="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-neutral-50"
+            title="Open this plot in Field cards"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-semibold text-neutral-700">{field.name}</div>
+              <div className="truncate text-[10px] text-neutral-400">
+                {field.code}
+                {field.division ? ` · ${field.division}` : ''}
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${badgeClass(item)}`}>{badgeText(item)}</span>
+              <div className="mt-0.5 text-[10px] text-neutral-400">NDVI {geo?.ndvi != null ? geo.ndvi.toFixed(2) : '--'}</div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Consecutive CONFIRMED (non-low-confidence/S1) observations a field has
+ * been classified 'good', walking back from its latest reading — the
+ * positive mirror of `computeAttentionStreak()` (growthStage.ts), but
+ * computed here from the read-only classified history rather than stored
+ * on `FieldGeo`, since (unlike attentionStreak) no view needed a "good
+ * streak" until now. */
+function computeGoodStreak(field: Field, geo: FieldGeo | undefined): number {
+  const rows = classifyHistory(field, geo)
+  let streak = 0
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i]
+    if (r.isUnconfirmed) continue
+    if (r.status === 'good') streak++
+    else break
+  }
+  return streak
 }
 
 function SummaryCard({ title, children }: { title: string; children: ReactNode }) {

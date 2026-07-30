@@ -1,12 +1,12 @@
 import type { SidebarFilters } from '../../components/dashboard/Sidebar'
 import { DEFAULT_WATCH_THRESHOLD, isWatch, type StatCardKey } from './computeFieldStats'
+import { seasonStartYearFor } from './season'
 import type { Field, FieldGeo } from './types'
 
-/** Combines the Sidebar's cascading Client/Factory/Division/Village/Plot
- * filters with the active stat-card category into a single filtered list —
- * the source all three Phase 2 views (Cards/Table/Summary) read from. Ports
- * the field-scoping portion of `applyFilters()`
- * (RS_Cane_Monitoring_S1.html:2937+) relevant to a latest-only model. */
+/** Combines the Sidebar's filters with the active stat-card category into a
+ * single filtered list — the source every tab view reads from. Ports the
+ * field-scoping portion of `applyFilters()` (RS_Cane_Monitoring_S1.html:
+ * 2937+) relevant to a latest-only model. */
 export function filterFields(
   fields: Field[],
   filters: SidebarFilters,
@@ -19,7 +19,30 @@ export function filterFields(
   if (filters.factory) result = result.filter((f) => f.factory === filters.factory)
   if (filters.division) result = result.filter((f) => f.division === filters.division)
   if (filters.village) result = result.filter((f) => f.village === filters.village)
+  if (filters.farmers.length > 0) result = result.filter((f) => filters.farmers.includes(f.name))
   if (filters.plot) result = result.filter((f) => f.code === filters.plot)
+  if (filters.plotType) result = result.filter((f) => f.type === filters.plotType)
+  if (filters.cropStage) result = result.filter((f) => geoByCode[f.code]?.growthStage === filters.cropStage)
+
+  if (filters.cropStatus === 'Good') {
+    result = result.filter((f) => f.healthStatus === 'good')
+  } else if (filters.cropStatus === 'Moderate') {
+    result = result.filter((f) => f.healthStatus === 'optimal')
+  } else if (filters.cropStatus === 'Need attention') {
+    // Ports the user's explicit clarification: the sidebar's "Need
+    // attention" option is the combination of the stat row's separate
+    // Need Attention + Need Serious Attention buckets, not just the milder
+    // 'attention' value alone.
+    result = result.filter((f) => f.healthStatus === 'attention' || f.healthStatus === 'serious')
+  }
+
+  if (filters.seasons.length > 0) {
+    const selectedYears = new Set(filters.seasons.map(Number))
+    result = result.filter((f) => {
+      const sy = seasonStartYearFor(f.plantDateRaw)
+      return sy !== null && selectedYears.has(sy)
+    })
+  }
 
   if (statFilter === 'watch') {
     result = result.filter((f) => isWatch(f, geoByCode[f.code], DEFAULT_WATCH_THRESHOLD))

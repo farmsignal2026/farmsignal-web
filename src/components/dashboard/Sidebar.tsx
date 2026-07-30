@@ -1,5 +1,9 @@
 import { useMemo } from 'react'
+import { stages } from '../../features/fields/growthStage'
+import { orderPlotTypes } from '../../features/fields/plotTypeStyle'
+import { getCurrentSeasonStartYear, seasonLabelForYear, seasonStartYearFor } from '../../features/fields/season'
 import type { Field } from '../../features/fields/types'
+import { MultiSelectDropdown } from './MultiSelectDropdown'
 
 export interface SidebarFilters {
   client: string
@@ -7,9 +11,25 @@ export interface SidebarFilters {
   division: string
   village: string
   plot: string
+  plotType: string
+  cropStage: string
+  cropStatus: string
+  seasons: string[]
+  farmers: string[]
 }
 
-export const EMPTY_FILTERS: SidebarFilters = { client: '', factory: '', division: '', village: '', plot: '' }
+export const EMPTY_FILTERS: SidebarFilters = {
+  client: '',
+  factory: '',
+  division: '',
+  village: '',
+  plot: '',
+  plotType: '',
+  cropStage: '',
+  cropStatus: '',
+  seasons: [],
+  farmers: [],
+}
 
 interface SidebarProps {
   fields: Field[]
@@ -22,10 +42,12 @@ function uniqueSorted(values: (string | null | undefined)[]): string[] {
   return Array.from(new Set(values.filter((v): v is string => Boolean(v)))).sort((a, b) => a.localeCompare(b))
 }
 
-/** Cascading Client/Factory/Division/Village/Plot filters — plain <select>s
- * for now (RS_Cane_Monitoring_S1.html:638-687 uses custom multi-select
- * checkbox dropdowns; deferred until Phase 2 actually filters Field
- * Cards/Table with them). */
+/** Cascading Client/Factory/Division/Village/Farmer/Plot filters (plain
+ * <select>s for the single-value ones — RS_Cane_Monitoring_S1.html:638-687's
+ * custom multi-select checkbox widget was deferred in Phase 1 since nothing
+ * used it yet; Plant Season and Farmer now get a real multi-select via
+ * MultiSelectDropdown since they need it), plus non-cascading Plot
+ * Type/Crop Stage/Crop Status. */
 export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarProps) {
   const clients = useMemo(() => uniqueSorted(fields.map((f) => f.clientCode)), [fields])
 
@@ -47,16 +69,40 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarP
   )
   const villages = useMemo(() => uniqueSorted(villageScoped.map((f) => f.village)), [villageScoped])
 
-  const plotScoped = useMemo(
+  const farmerScoped = useMemo(
     () => villageScoped.filter((f) => !filters.village || f.village === filters.village),
     [villageScoped, filters.village],
   )
+  const farmers = useMemo(() => uniqueSorted(farmerScoped.map((f) => f.name)), [farmerScoped])
+
+  const plotScoped = useMemo(
+    () => farmerScoped.filter((f) => filters.farmers.length === 0 || filters.farmers.includes(f.name)),
+    [farmerScoped, filters.farmers],
+  )
   const plots = useMemo(() => uniqueSorted(plotScoped.map((f) => f.code)), [plotScoped])
+
+  const plotTypes = useMemo(() => orderPlotTypes(uniqueSorted(fields.map((f) => f.type))), [fields])
+
+  const seasonOptions = useMemo(() => {
+    const years = new Set<number>()
+    fields.forEach((f) => {
+      const sy = seasonStartYearFor(f.plantDateRaw)
+      if (sy !== null) years.add(sy)
+    })
+    years.add(getCurrentSeasonStartYear())
+    const currentYear = getCurrentSeasonStartYear()
+    return Array.from(years)
+      .sort((a, b) => a - b)
+      .map((y) => ({
+        value: String(y),
+        label: seasonLabelForYear(y) + (y === currentYear ? ' (current)' : ''),
+      }))
+  }, [fields])
 
   const set = (patch: Partial<SidebarFilters>) => onChange({ ...filters, ...patch })
 
   return (
-    <aside className="w-64 shrink-0 space-y-4 border-r border-neutral-200 bg-white p-4">
+    <aside className="w-64 shrink-0 space-y-4 overflow-y-auto border-r border-neutral-200 bg-white p-4">
       <button
         type="button"
         onClick={onOverviewClick}
@@ -72,27 +118,60 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarP
             label="Client"
             value={filters.client}
             options={clients}
-            onChange={(v) => set({ client: v, factory: '', division: '', village: '', plot: '' })}
+            onChange={(v) => set({ client: v, factory: '', division: '', village: '', farmers: [], plot: '' })}
           />
           <FilterSelect
             label="Factory / Mill"
             value={filters.factory}
             options={factories}
-            onChange={(v) => set({ factory: v, division: '', village: '', plot: '' })}
+            onChange={(v) => set({ factory: v, division: '', village: '', farmers: [], plot: '' })}
+          />
+          <MultiSelectDropdown
+            label="Plant Season"
+            options={seasonOptions}
+            selected={filters.seasons}
+            onChange={(v) => set({ seasons: v })}
+            placeholder="All seasons"
           />
           <FilterSelect
             label="Division"
             value={filters.division}
             options={divisions}
-            onChange={(v) => set({ division: v, village: '', plot: '' })}
+            onChange={(v) => set({ division: v, village: '', farmers: [], plot: '' })}
           />
           <FilterSelect
             label="Village"
             value={filters.village}
             options={villages}
-            onChange={(v) => set({ village: v, plot: '' })}
+            onChange={(v) => set({ village: v, farmers: [], plot: '' })}
+          />
+          <MultiSelectDropdown
+            label="Farmer"
+            options={farmers.map((f) => ({ value: f, label: f }))}
+            selected={filters.farmers}
+            onChange={(v) => set({ farmers: v, plot: '' })}
+            searchable
+            placeholder="All farmers"
           />
           <FilterSelect label="Plot" value={filters.plot} options={plots} onChange={(v) => set({ plot: v })} />
+          <FilterSelect
+            label="Plot Type"
+            value={filters.plotType}
+            options={plotTypes}
+            onChange={(v) => set({ plotType: v })}
+          />
+          <FilterSelect
+            label="Crop Stage"
+            value={filters.cropStage}
+            options={stages.map((s) => s.name)}
+            onChange={(v) => set({ cropStage: v })}
+          />
+          <FilterSelect
+            label="Crop Status"
+            value={filters.cropStatus}
+            options={['Good', 'Moderate', 'Need attention']}
+            onChange={(v) => set({ cropStatus: v })}
+          />
         </div>
         <button
           type="button"

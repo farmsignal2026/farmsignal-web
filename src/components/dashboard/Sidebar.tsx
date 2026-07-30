@@ -4,6 +4,7 @@ import { orderPlotTypes } from '../../features/fields/plotTypeStyle'
 import { getCurrentSeasonStartYear, seasonLabelForYear, seasonStartYearFor } from '../../features/fields/season'
 import type { Field } from '../../features/fields/types'
 import { MultiSelectDropdown } from './MultiSelectDropdown'
+import { SearchableSelect } from './SearchableSelect'
 
 export interface SidebarFilters {
   client: string
@@ -153,7 +154,7 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarP
             searchable
             placeholder="All farmers"
           />
-          <FilterSelect label="Plot" value={filters.plot} options={plots} onChange={(v) => set({ plot: v })} />
+          <SearchableSelect label="Plot" value={filters.plot} options={plots} onChange={(v) => set({ plot: v })} />
           <FilterSelect
             label="Plot Type"
             value={filters.plotType}
@@ -163,7 +164,7 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarP
           <FilterSelect
             label="Crop Stage"
             value={filters.cropStage}
-            options={stages.map((s) => s.name)}
+            options={[...stages.map((s) => s.name), 'Post-Maturity']}
             onChange={(v) => set({ cropStage: v })}
           />
           <FilterSelect

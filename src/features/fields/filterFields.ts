@@ -22,7 +22,21 @@ export function filterFields(
   if (filters.farmers.length > 0) result = result.filter((f) => filters.farmers.includes(f.name))
   if (filters.plot) result = result.filter((f) => f.code === filters.plot)
   if (filters.plotType) result = result.filter((f) => f.type === filters.plotType)
-  if (filters.cropStage) result = result.filter((f) => geoByCode[f.code]?.growthStage === filters.cropStage)
+
+  if (filters.cropStage === 'Post-Maturity') {
+    // Not a real growth stage in growthStage.ts's `stages` — stageForAge()
+    // deliberately clamps any age beyond 360d to 'Maturity' for NDVI
+    // threshold purposes (see its own docstring), so `growthStage` alone
+    // can't distinguish this. Filter-layer only, using the *un-clamped*
+    // `growthDays`; doesn't touch the shared classification logic.
+    result = result.filter((f) => (geoByCode[f.code]?.growthDays ?? 0) > 360)
+  } else if (filters.cropStage === 'Maturity') {
+    result = result.filter(
+      (f) => geoByCode[f.code]?.growthStage === 'Maturity' && (geoByCode[f.code]?.growthDays ?? 0) <= 360,
+    )
+  } else if (filters.cropStage) {
+    result = result.filter((f) => geoByCode[f.code]?.growthStage === filters.cropStage)
+  }
 
   if (filters.cropStatus === 'Good') {
     result = result.filter((f) => f.healthStatus === 'good')

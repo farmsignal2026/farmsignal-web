@@ -31,7 +31,15 @@ export function FieldDetailModal({ field, geo, onClose, onViewOnMap }: FieldDeta
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-xl"
+        className="resize overflow-auto rounded-lg bg-white shadow-xl"
+        style={{
+          width: 'min(92vw, 1200px)',
+          height: 'min(88vh, 900px)',
+          minWidth: 420,
+          minHeight: 320,
+          maxWidth: '95vw',
+          maxHeight: '95vh',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-2 border-b border-neutral-100 bg-white p-4">

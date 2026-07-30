@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useAuth } from '../../features/auth/useAuth'
+import type { CompareGroupKey } from '../../features/fields/compare'
 import type { StatCardKey } from '../../features/fields/computeFieldStats'
 import { filterFields } from '../../features/fields/filterFields'
 import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
+import { CompareView } from './CompareView'
 import { FieldCardsView } from './FieldCardsView'
 import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
@@ -49,6 +51,30 @@ export function DashboardShell() {
   const viewPlotOnMap = (plotCode: string) => {
     setMapFocusPlot(plotCode)
     setActiveTab('map')
+  }
+
+  const viewGroupInCards = (groupKey: CompareGroupKey, groupValue: string) => {
+    switch (groupKey) {
+      case 'client':
+        setFilters({ ...EMPTY_FILTERS, client: groupValue })
+        break
+      case 'division':
+        setFilters({ ...EMPTY_FILTERS, division: groupValue })
+        break
+      case 'farmer':
+        setFilters({ ...EMPTY_FILTERS, farmers: [groupValue] })
+        break
+      case 'plotType':
+        setFilters({ ...EMPTY_FILTERS, plotType: groupValue })
+        break
+      case 'stage':
+        setFilters({ ...EMPTY_FILTERS, cropStage: groupValue })
+        break
+      case 'variety':
+        setFilters({ ...EMPTY_FILTERS, variety: groupValue })
+        break
+    }
+    setActiveTab('cards')
   }
 
   // Clicking a tab button directly (as opposed to "View on Map") should
@@ -117,6 +143,14 @@ export function DashboardShell() {
                   {activeTab === 'trend' && (
                     <HealthTrendView fields={filteredFields} geoByCode={geoByCode} seasons={filters.seasons} />
                   )}
+                  {activeTab === 'compare' && (
+                    <CompareView
+                      fields={filteredFields}
+                      geoByCode={geoByCode}
+                      seasons={filters.seasons}
+                      onViewGroupInCards={viewGroupInCards}
+                    />
+                  )}
                   {activeTab === 'cards' && (
                     <FieldCardsView fields={filteredFields} geoByCode={geoByCode} onViewOnMap={viewPlotOnMap} />
                   )}
@@ -135,6 +169,7 @@ export function DashboardShell() {
                     <FieldMapView fields={filteredFields} geoByCode={geoByCode} focusPlotCode={mapFocusPlot} />
                   )}
                   {activeTab !== 'trend' &&
+                    activeTab !== 'compare' &&
                     activeTab !== 'cards' &&
                     activeTab !== 'table' &&
                     activeTab !== 'summary' &&

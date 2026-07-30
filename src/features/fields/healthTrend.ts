@@ -66,9 +66,9 @@ function formatLabel(d: Date): string {
 }
 
 const HEALTH_CATS = [
-  { key: 'good', label: 'Good', color: '#22c55e' },
-  { key: 'optimal', label: 'Moderate', color: '#f97316' },
-  { key: 'attention', label: 'Need Attention', color: '#ef4444' },
+  { key: 'good', label: 'Good', color: '#22a65a' },
+  { key: 'optimal', label: 'Moderate', color: '#f59e0b' },
+  { key: 'attention', label: 'Need Attention', color: '#dc2626' },
 ]
 
 const STAGE_TREND_COLOR: Record<string, string> = {

@@ -22,6 +22,7 @@ export function filterFields(
   if (filters.farmers.length > 0) result = result.filter((f) => filters.farmers.includes(f.name))
   if (filters.plot) result = result.filter((f) => f.code === filters.plot)
   if (filters.plotType) result = result.filter((f) => f.type === filters.plotType)
+  if (filters.variety) result = result.filter((f) => f.variety === filters.variety)
 
   if (filters.cropStage === 'Post-Maturity') {
     // Not a real growth stage in growthStage.ts's `stages` — stageForAge()

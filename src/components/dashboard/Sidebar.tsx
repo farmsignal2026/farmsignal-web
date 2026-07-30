@@ -13,6 +13,7 @@ export interface SidebarFilters {
   village: string
   plot: string
   plotType: string
+  variety: string
   cropStage: string
   cropStatus: string
   seasons: string[]
@@ -26,6 +27,7 @@ export const EMPTY_FILTERS: SidebarFilters = {
   village: '',
   plot: '',
   plotType: '',
+  variety: '',
   cropStage: '',
   cropStatus: '',
   seasons: [],
@@ -83,6 +85,7 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarP
   const plots = useMemo(() => uniqueSorted(plotScoped.map((f) => f.code)), [plotScoped])
 
   const plotTypes = useMemo(() => orderPlotTypes(uniqueSorted(fields.map((f) => f.type))), [fields])
+  const varieties = useMemo(() => uniqueSorted(fields.map((f) => f.variety)), [fields])
 
   const seasonOptions = useMemo(() => {
     const years = new Set<number>()
@@ -160,6 +163,12 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarP
             value={filters.plotType}
             options={plotTypes}
             onChange={(v) => set({ plotType: v })}
+          />
+          <FilterSelect
+            label="Variety"
+            value={filters.variety}
+            options={varieties}
+            onChange={(v) => set({ variety: v })}
           />
           <FilterSelect
             label="Crop Stage"

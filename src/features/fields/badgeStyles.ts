@@ -11,17 +11,25 @@ export const HEALTH_LABEL: Record<HealthStatus, string> = {
   unknown: 'Unknown',
 }
 
-/** Canonical health-status hex colors, user-specified (not derived from the
- * HTML source's own amber/red scheme) — single source of truth so the stat
- * row, Stage Summary, and Field Map all agree. Don't "correct" these back
- * toward RS_Cane_Monitoring_S1.html's HEALTH_COLORS; that's intentional. */
+/** Canonical health-status hex colors — matches RS_Cane_Monitoring_S1.html's
+ * own HEALTH_COLORS (:5216) exactly (good/optimal/attention), per user
+ * request for more contrast than an earlier, less-saturated palette this
+ * port had used. 'serious' has no source equivalent (that severity split is
+ * this port's own convention layered on top, see growthStage.ts). Single
+ * source of truth so the stat row, Stage Summary, and Field Map all agree. */
 export const HEALTH_COLOR_HEX: Record<HealthStatus, string> = {
-  good: '#22c55e',
-  optimal: '#f97316',
-  attention: '#ef4444',
+  good: '#22a65a',
+  optimal: '#f59e0b',
+  attention: '#dc2626',
   serious: '#7f1d1d',
   unknown: '#9ca3af',
 }
+
+/** Canonical Watch color — source uses purple (#7c3aed); this port's
+ * StatRow.tsx already established blue (Tailwind blue-400) instead, so
+ * Compare's Watch bars match that rather than reverting to the source's
+ * palette. */
+export const WATCH_COLOR_HEX = '#3b82f6'
 
 export const HEALTH_BADGE_CLASS: Record<HealthStatus, string> = {
   good: 'bg-green-50 text-green-600 border border-green-200',

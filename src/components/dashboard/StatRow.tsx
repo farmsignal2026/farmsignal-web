@@ -2,9 +2,9 @@ import { computeFieldStats, type StatCardKey } from '../../features/fields/compu
 import type { Field, FieldGeo } from '../../features/fields/types'
 
 const CARD_COLOR: Record<StatCardKey, string> = {
-  good: 'text-[#22c55e]',
-  optimal: 'text-[#f97316]',
-  attention: 'text-[#ef4444]',
+  good: 'text-[#22a65a]',
+  optimal: 'text-[#f59e0b]',
+  attention: 'text-[#dc2626]',
   serious: 'text-[#7f1d1d]',
   watch: 'text-blue-400',
 }

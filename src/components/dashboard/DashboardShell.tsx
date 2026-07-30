@@ -114,7 +114,9 @@ export function DashboardShell() {
               <div>
                 <TabBar active={activeTab} onSelect={handleTabSelect} />
                 <div className="rounded-b-md border border-t-0 border-neutral-200 bg-white">
-                  {activeTab === 'trend' && <HealthTrendView fields={filteredFields} geoByCode={geoByCode} />}
+                  {activeTab === 'trend' && (
+                    <HealthTrendView fields={filteredFields} geoByCode={geoByCode} seasons={filters.seasons} />
+                  )}
                   {activeTab === 'cards' && (
                     <FieldCardsView fields={filteredFields} geoByCode={geoByCode} onViewOnMap={viewPlotOnMap} />
                   )}
@@ -126,7 +128,9 @@ export function DashboardShell() {
                       onViewPlotInCards={viewPlotInCards}
                     />
                   )}
-                  {activeTab === 'chart' && <NdviTrendView fields={filteredFields} geoByCode={geoByCode} />}
+                  {activeTab === 'chart' && (
+                    <NdviTrendView fields={filteredFields} geoByCode={geoByCode} seasons={filters.seasons} />
+                  )}
                   {activeTab === 'map' && (
                     <FieldMapView fields={filteredFields} geoByCode={geoByCode} focusPlotCode={mapFocusPlot} />
                   )}

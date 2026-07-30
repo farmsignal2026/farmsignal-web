@@ -4,52 +4,74 @@ import '../../lib/chartSetup'
 import { classifyHistory } from '../../features/fields/classifyHistory'
 import { stageForAge, stages } from '../../features/fields/growthStage'
 import { AGE_BUCKET_DAYS, orderPlotTypes, plotTypeColor } from '../../features/fields/plotTypeStyle'
+import { seasonLabelForYear, seasonStartYearFor } from '../../features/fields/season'
 import type { Field, FieldGeo } from '../../features/fields/types'
 import { buildStageBands, stageBandsPlugin } from '../../lib/stageBandsPlugin'
 
 interface NdviTrendViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
+  /** Selected Plant Season years from the sidebar filter — 2+ enables the
+   * "Plant Season (YoY)" grouping mode. */
+  seasons: string[]
 }
 
-/** NDVI Trend tab — Plant vs Ratoon grouped view only (per user decision):
- * one averaged NDVI-vs-age curve per crop-cycle type, not one line per
- * plot (which would be unreadable clutter at 400+ fields). Ports
- * `renderChartByType()` (RS_Cane_Monitoring_S1.html:5508-5610). Legend
- * items are click-to-hide/unhide (ports `toggleChartType()`, :5636-5658). */
-export function NdviTrendView({ fields, geoByCode }: NdviTrendViewProps) {
-  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set())
+type GroupBy = 'plotType' | 'season'
+
+const SEASON_COLORS = ['#15803D', '#2563EB', '#DB2777', '#7C3AED', '#EA580C', '#0D9488']
+
+function seasonColor(index: number): string {
+  return SEASON_COLORS[index % SEASON_COLORS.length]
+}
+
+/** NDVI Trend tab — averaged NDVI-vs-age curves, grouped either by
+ * crop-cycle Plot Type (Plant vs Ratoon, the default — RS_Cane_Monitoring_S1.html
+ * `renderChartByType()` :5508-5610) or, once 2+ seasons are picked in the
+ * sidebar's Plant Season filter, by season instead — a new grouping mode
+ * (not in the source app, which never had a YoY option on this specific
+ * chart) reusing the exact same age-bucketing/averaging approach. Never one
+ * line per individual plot — unreadable clutter at 400+ fields. */
+export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps) {
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
+  const seasonModeEnabled = seasons.length >= 2
+  const [groupBy, setGroupBy] = useState<GroupBy>('plotType')
+  const bySeason = groupBy === 'season' && seasonModeEnabled
 
   const { datasets, legend, activeStages, hasData } = useMemo(() => {
     const buckets: Record<string, Record<number, { sum: number; count: number }>> = {}
     const activeStageNames = new Set<string>()
 
     for (const field of fields) {
-      const plotType = field.type
-      if (!plotType) continue
+      const groupKey = bySeason ? seasonYearKey(field) : field.type
+      if (!groupKey) continue
       const rows = classifyHistory(field, geoByCode[field.code])
       for (const row of rows) {
         if (row.isS1) continue
         const b = Math.floor(row.age / AGE_BUCKET_DAYS)
-        buckets[plotType] ??= {}
-        buckets[plotType][b] ??= { sum: 0, count: 0 }
-        buckets[plotType][b].sum += row.ndvi
-        buckets[plotType][b].count += 1
+        buckets[groupKey] ??= {}
+        buckets[groupKey][b] ??= { sum: 0, count: 0 }
+        buckets[groupKey][b].sum += row.ndvi
+        buckets[groupKey][b].count += 1
         const sf = stageForAge(row.age)
         if (sf) activeStageNames.add(sf.stage.name)
       }
     }
 
-    const orderedTypes = orderPlotTypes(Object.keys(buckets))
+    const orderedKeys = bySeason
+      ? Object.keys(buckets)
+          .map(Number)
+          .sort((a, b) => a - b)
+          .map(String)
+      : orderPlotTypes(Object.keys(buckets))
 
-    const datasets = orderedTypes.map((pt) => {
-      const bkts = buckets[pt]
+    const datasets = orderedKeys.map((key, i) => {
+      const bkts = buckets[key]
       const ageKeys = Object.keys(bkts)
         .map(Number)
         .sort((a, b) => a - b)
-      const color = plotTypeColor(pt)
+      const color = bySeason ? seasonColor(i) : plotTypeColor(key)
       return {
-        label: pt,
+        label: bySeason ? seasonLabelForYear(Number(key)) : key,
         data: ageKeys.map((b) => ({
           x: b * AGE_BUCKET_DAYS + AGE_BUCKET_DAYS / 2,
           y: Number((bkts[b].sum / bkts[b].count).toFixed(3)),
@@ -64,20 +86,23 @@ export function NdviTrendView({ fields, geoByCode }: NdviTrendViewProps) {
         pointHoverRadius: 7,
         borderWidth: 2.5,
         fill: false,
-        hidden: hiddenTypes.has(pt),
+        hidden: hiddenKeys.has(key),
       }
     })
 
-    const legend = orderedTypes.map((pt) => ({
-      plotType: pt,
-      color: plotTypeColor(pt),
-      plotCount: new Set(fields.filter((f) => f.type === pt).map((f) => f.code)).size,
+    const legend = orderedKeys.map((key, i) => ({
+      key,
+      label: bySeason ? seasonLabelForYear(Number(key)) : key,
+      color: bySeason ? seasonColor(i) : plotTypeColor(key),
+      plotCount: new Set(
+        fields.filter((f) => (bySeason ? seasonYearKey(f) === key : f.type === key)).map((f) => f.code),
+      ).size,
     }))
 
     const activeStages = stages.filter((s) => activeStageNames.has(s.name))
 
-    return { datasets, legend, activeStages, hasData: orderedTypes.length > 0 }
-  }, [fields, geoByCode, hiddenTypes])
+    return { datasets, legend, activeStages, hasData: orderedKeys.length > 0 }
+  }, [fields, geoByCode, hiddenKeys, bySeason])
 
   const thresholdDatasets = useMemo(
     () =>
@@ -103,10 +128,10 @@ export function NdviTrendView({ fields, geoByCode }: NdviTrendViewProps) {
 
   const stageBands = useMemo(() => buildStageBands(activeStages), [activeStages])
 
-  const toggleType = (pt: string) => {
-    setHiddenTypes((prev) => {
+  const toggleKey = (key: string) => {
+    setHiddenKeys((prev) => {
       const next = new Set(prev)
-      if (!next.delete(pt)) next.add(pt)
+      if (!next.delete(key)) next.add(key)
       return next
     })
   }
@@ -114,34 +139,55 @@ export function NdviTrendView({ fields, geoByCode }: NdviTrendViewProps) {
   if (!hasData) {
     return (
       <div className="p-10 text-center text-sm text-neutral-400">
-        No Plot Type data available for the selected plots.
+        {bySeason ? 'No NDVI data available for the selected seasons.' : 'No Plot Type data available for the selected plots.'}
       </div>
     )
   }
 
   return (
     <div className="p-4">
-      <div className="mb-1 text-sm font-semibold text-neutral-700">NDVI trend — age in days after planting</div>
-      <div className="mb-3 text-xs text-neutral-400">
-        Dotted band = stage NDVI threshold · one averaged line per crop-cycle type (Plant/Ratoon) · click a legend
-        item to hide/show it
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-neutral-700">NDVI trend — age in days after planting</div>
+          <div className="text-xs text-neutral-400">
+            Dotted band = stage NDVI threshold · click a legend item to hide/show it
+          </div>
+        </div>
+        <div className="flex overflow-hidden rounded-md border border-neutral-200">
+          <button
+            type="button"
+            onClick={() => setGroupBy('plotType')}
+            className={`px-3 py-1.5 text-xs font-medium ${groupBy === 'plotType' ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+          >
+            Plot Type
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupBy('season')}
+            disabled={!seasonModeEnabled}
+            title={!seasonModeEnabled ? 'Select 2+ seasons in the Plant Season filter (sidebar) to enable' : undefined}
+            className={`px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${groupBy === 'season' ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+          >
+            Plant Season (YoY)
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-4">
         {legend.map((l) => {
-          const isHidden = hiddenTypes.has(l.plotType)
+          const isHidden = hiddenKeys.has(l.key)
           return (
             <button
-              key={l.plotType}
+              key={l.key}
               type="button"
-              onClick={() => toggleType(l.plotType)}
+              onClick={() => toggleKey(l.key)}
               className={`flex items-center gap-1.5 text-xs ${isHidden ? 'text-neutral-400 line-through' : 'text-neutral-600'}`}
             >
               <span
                 className="inline-block h-2.5 w-3.5 rounded-sm"
                 style={{ backgroundColor: isHidden ? '#d1d5db' : l.color }}
               />
-              {l.plotType} ({l.plotCount} plots)
+              {l.label} ({l.plotCount} plots)
             </button>
           )
         })}
@@ -155,6 +201,12 @@ export function NdviTrendView({ fields, geoByCode }: NdviTrendViewProps) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
+              // Chart.js's own legend is disabled — the clickable HTML
+              // legend built above the chart already covers this, and
+              // showing both was rendering the threshold-band helper
+              // datasets ("_t_Germination" etc.) as a second, unfiltered
+              // legend row underneath it.
+              legend: { display: false },
               tooltip: {
                 filter: (item) => !String(item.dataset.label).startsWith('_t'),
                 callbacks: {
@@ -185,4 +237,9 @@ export function NdviTrendView({ fields, geoByCode }: NdviTrendViewProps) {
       </div>
     </div>
   )
+}
+
+function seasonYearKey(field: Field): string | null {
+  const y = seasonStartYearFor(field.plantDateRaw)
+  return y === null ? null : String(y)
 }

@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Bar, Line } from 'react-chartjs-2'
 import '../../lib/chartSetup'
-import { computeHealthTrend, type TrendTrack } from '../../features/fields/healthTrend'
+import { computeHealthTrend, computeHealthTrendYoY, type TrendTrack } from '../../features/fields/healthTrend'
+import { seasonLabelForYear } from '../../features/fields/season'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { lineStyleLegendLabels } from '../../lib/chartLegend'
 
 interface HealthTrendViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
+  /** Selected Plant Season years from the sidebar filter (string form, as
+   * stored in SidebarFilters) — 2+ enables the Plant Season (YoY) view. */
+  seasons: string[]
 }
 
-type ViewAs = 'count' | 'pct'
+type ViewAs = 'count' | 'pct' | 'yoy'
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -29,32 +34,30 @@ function defaultStart(fields: Field[]): string {
   return isoDate(d)
 }
 
-/** Draws the legend swatch as a thick colored line rather than a filled
- * box, matching the chart's own line style — Chart.js's default legend
- * swatch fills with the dataset's (translucent) backgroundColor, which
- * reads as a washed-out box rather than a line. */
-function lineStyleLegendLabels(chart: import('chart.js').Chart) {
-  return (chart.data.datasets ?? []).map((ds, i) => ({
-    text: String(ds.label ?? ''),
-    fillStyle: ds.borderColor as string,
-    strokeStyle: ds.borderColor as string,
-    lineWidth: 0,
-    hidden: !chart.isDatasetVisible(i),
-    datasetIndex: i,
-  }))
-}
-
 /** Health Trend tab (the default landing tab) — fields in Good/Moderate/
  * Need Attention (or, in Crop Stage track, growth stage) over fortnightly
  * snapshots. Ports `renderTrend()`'s Count/% modes
  * (RS_Cane_Monitoring_S1.html:7054-7228); fixed fortnightly sampling and no
  * Year-over-Year view this pass — see plan's agreed scope trims. */
-export function HealthTrendView({ fields, geoByCode }: HealthTrendViewProps) {
+export function HealthTrendView({ fields, geoByCode, seasons }: HealthTrendViewProps) {
   const [start, setStart] = useState(() => defaultStart(fields))
   const [startTouched, setStartTouched] = useState(false)
   const [end, setEnd] = useState(isoDate(new Date()))
   const [track, setTrack] = useState<TrendTrack>('health')
   const [viewAs, setViewAs] = useState<ViewAs>('count')
+
+  const yoyEnabled = seasons.length >= 2
+  const isYoY = viewAs === 'yoy' && yoyEnabled && track === 'health'
+
+  const setTrackChecked = (t: TrendTrack) => {
+    setTrack(t)
+    if (t === 'stage' && viewAs === 'yoy') setViewAs('count')
+  }
+
+  const yoySeries = useMemo(
+    () => (isYoY ? computeHealthTrendYoY(fields, geoByCode, seasons.map(Number)) : null),
+    [isYoY, fields, geoByCode, seasons],
+  )
 
   // Keep Start following the earliest planting date of whatever's
   // currently filtered (e.g. RSCL -> Mundiyampakkam narrows it to that
@@ -78,35 +81,39 @@ export function HealthTrendView({ fields, geoByCode }: HealthTrendViewProps) {
   return (
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-end gap-4 rounded-lg border border-neutral-100 bg-neutral-50 p-3">
-        <label className="text-xs font-medium text-neutral-500">
-          Start
-          <input
-            type="date"
-            value={start}
-            onChange={(e) => {
-              setStart(e.target.value)
-              setStartTouched(true)
-            }}
-            className="mt-1 block rounded-md border border-neutral-200 px-2 py-1 text-sm"
-          />
-        </label>
-        <label className="text-xs font-medium text-neutral-500">
-          End
-          <input
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className="mt-1 block rounded-md border border-neutral-200 px-2 py-1 text-sm"
-          />
-        </label>
+        {!isYoY && (
+          <>
+            <label className="text-xs font-medium text-neutral-500">
+              Start
+              <input
+                type="date"
+                value={start}
+                onChange={(e) => {
+                  setStart(e.target.value)
+                  setStartTouched(true)
+                }}
+                className="mt-1 block rounded-md border border-neutral-200 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-xs font-medium text-neutral-500">
+              End
+              <input
+                type="date"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className="mt-1 block rounded-md border border-neutral-200 px-2 py-1 text-sm"
+              />
+            </label>
+          </>
+        )}
 
         <div>
           <div className="mb-1 text-xs font-medium text-neutral-500">Track</div>
           <div className="flex overflow-hidden rounded-md border border-neutral-200">
-            <ToggleButton active={track === 'health'} onClick={() => setTrack('health')}>
+            <ToggleButton active={track === 'health'} onClick={() => setTrackChecked('health')}>
               Health status
             </ToggleButton>
-            <ToggleButton active={track === 'stage'} onClick={() => setTrack('stage')}>
+            <ToggleButton active={track === 'stage'} onClick={() => setTrackChecked('stage')}>
               Crop stage
             </ToggleButton>
           </div>
@@ -121,20 +128,82 @@ export function HealthTrendView({ fields, geoByCode }: HealthTrendViewProps) {
             <ToggleButton active={viewAs === 'pct'} onClick={() => setViewAs('pct')}>
               %
             </ToggleButton>
+            <ToggleButton
+              active={viewAs === 'yoy'}
+              disabled={!yoyEnabled || track === 'stage'}
+              title={
+                track === 'stage'
+                  ? 'Only available for Health status tracking'
+                  : !yoyEnabled
+                    ? 'Select 2+ seasons in the Plant Season filter (sidebar) to enable'
+                    : undefined
+              }
+              onClick={() => setViewAs('yoy')}
+            >
+              Plant Season (YoY)
+            </ToggleButton>
           </div>
         </div>
       </div>
 
       <div className="mb-1 text-sm font-semibold text-neutral-700">
-        {track === 'health' ? 'Crop Health Trend' : 'Crop Stage Trend'}
+        {isYoY ? 'Crop Health Trend — YoY Comparison' : track === 'health' ? 'Crop Health Trend' : 'Crop Stage Trend'}
       </div>
       <div className="mb-3 text-xs text-neutral-400">
-        {track === 'health'
-          ? 'No. of fields in Good / Moderate / Need Attention over fortnightly snapshots'
-          : 'No. of fields in each growth stage over fortnightly snapshots'}
+        {isYoY
+          ? `Good / Moderate / Need Attention by Days After Planting, ${[...seasons]
+              .sort((a, b) => Number(a) - Number(b))
+              .map((y) => seasonLabelForYear(Number(y)))
+              .join(' vs ')} — aligned by crop age, not calendar date`
+          : track === 'health'
+            ? 'No. of fields in Good / Moderate / Need Attention over fortnightly snapshots'
+            : 'No. of fields in each growth stage over fortnightly snapshots'}
       </div>
 
-      {!result || result.labels.length === 0 ? (
+      {isYoY ? (
+        !yoySeries || yoySeries.every((s) => s.points.length === 0) ? (
+          <div className="p-10 text-center text-sm text-neutral-400">
+            No fields with NDVI data in the selected seasons for the current filter.
+          </div>
+        ) : (
+          <div style={{ height: 400 }}>
+            <Line
+              data={{
+                datasets: yoySeries.map((s) => ({
+                  label: s.label,
+                  data: s.points.map((p) => ({ x: p.x, y: p.count })),
+                  borderColor: s.color,
+                  backgroundColor: s.color,
+                  borderDash: s.dash,
+                  pointRadius: 3,
+                  tension: 0.3,
+                  fill: false,
+                })),
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 26, boxHeight: 4, font: { size: 10 }, generateLabels: lineStyleLegendLabels },
+                  },
+                  tooltip: {
+                    callbacks: {
+                      title: (items) => `Crop age: ${items[0].parsed.x} days`,
+                      label: (item) => `${item.dataset.label}: ${item.parsed.y} fields`,
+                    },
+                  },
+                },
+                scales: {
+                  x: { type: 'linear', title: { display: true, text: 'Days After Planting' } },
+                  y: { beginAtZero: true, title: { display: true, text: 'Number of fields' }, ticks: { stepSize: 1 } },
+                },
+              }}
+            />
+          </div>
+        )
+      ) : !result || result.labels.length === 0 ? (
         <div className="p-10 text-center text-sm text-neutral-400">
           No observations found in this date range for the current filter.
         </div>
@@ -213,16 +282,22 @@ function ToggleButton({
   active,
   onClick,
   children,
+  disabled,
+  title,
 }: {
   active: boolean
   onClick: () => void
   children: string
+  disabled?: boolean
+  title?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-1.5 text-xs font-medium ${active ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+      disabled={disabled}
+      title={title}
+      className={`px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
     >
       {children}
     </button>

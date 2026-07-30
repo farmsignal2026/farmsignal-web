@@ -47,15 +47,17 @@ export function stageBadgeClass(stageName: string): string {
 }
 
 /** Hex equivalents of STAGE_BADGE_CLASS, for contexts that can't use
- * Tailwind classes (canvas-drawn chart bands via stageBandsPlugin). Same
- * underlying palette as index.css's ported color scale, just as literal
- * hex since <canvas> can't resolve CSS custom properties. */
+ * Tailwind classes (canvas-drawn chart bands via stageBandsPlugin). Uses
+ * more saturated 200-level tones than STAGE_BADGE_CLASS's pale 50-level
+ * badge backgrounds deliberately — at a thin 16px band height the near-
+ * white 50-level tints were indistinguishable from each other (user
+ * feedback: "all fill colors looks same"). */
 export const STAGE_BAND_COLOR: Record<string, { fill: string; text: string }> = {
-  Germination: { fill: '#eff6ff', text: '#1d4ed8' },
-  'Early Tiller': { fill: '#f5f3ff', text: '#7c3aed' },
-  Tillering: { fill: '#f0fdfa', text: '#0d9488' },
-  'Grand Growth': { fill: '#fffbeb', text: '#b45309' },
-  Maturity: { fill: '#f3f4f6', text: '#4b5563' },
+  Germination: { fill: '#bfdbfe', text: '#1e3a8a' },
+  'Early Tiller': { fill: '#ddd6fe', text: '#4c1d95' },
+  Tillering: { fill: '#99f6e4', text: '#134e4a' },
+  'Grand Growth': { fill: '#fde68a', text: '#78350f' },
+  Maturity: { fill: '#d1d5db', text: '#111827' },
 }
 
 export function stageBandColor(stageName: string): { fill: string; text: string } {

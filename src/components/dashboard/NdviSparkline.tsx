@@ -41,7 +41,7 @@ export function NdviSparkline({ field, geo, height = 36 }: NdviSparklineProps) {
           maintainAspectRatio: false,
           animation: false,
           scales: { x: { type: 'linear', display: false }, y: { display: false, min: 0, max: 1 } },
-          plugins: { tooltip: { enabled: false } },
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
           elements: { point: { hoverRadius: 0 } },
         }}
       />

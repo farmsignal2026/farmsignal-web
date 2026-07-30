@@ -5,6 +5,7 @@ import { classifyHistory } from '../../features/fields/classifyHistory'
 import { stageForAge, stages } from '../../features/fields/growthStage'
 import { HEALTH_COLOR_HEX, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { lineStyleLegendLabels } from '../../lib/chartLegend'
 import { buildStageBands, stageBandsPlugin } from '../../lib/stageBandsPlugin'
 
 interface NdviTrendSectionProps {
@@ -117,6 +118,10 @@ export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
+              legend: {
+                position: 'top',
+                labels: { boxWidth: 26, boxHeight: 4, font: { size: 11 }, generateLabels: lineStyleLegendLabels },
+              },
               tooltip: {
                 filter: (item) => !String(item.dataset.label).startsWith('_t'),
                 callbacks: {

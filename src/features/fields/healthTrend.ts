@@ -1,5 +1,7 @@
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
 import { stageForAge, stages } from './growthStage'
+import { AGE_BUCKET_DAYS } from './plotTypeStyle'
+import { seasonLabelForYear, seasonStartYearFor } from './season'
 import type { Field, FieldGeo } from './types'
 
 export type TrendTrack = 'health' | 'stage'
@@ -173,4 +175,76 @@ export function computeHealthTrend(
   ]
 
   return { labels: filteredLabels, series, totals: filteredTotals }
+}
+
+export interface YoYPoint {
+  x: number
+  count: number
+  total: number
+}
+
+export interface YoYSeries {
+  key: string
+  label: string
+  color: string
+  dash: number[]
+  points: YoYPoint[]
+}
+
+const YOY_DASH: number[][] = [[], [6, 4], [2, 3], [8, 3, 2, 3]]
+
+/** Ports `renderTrendYoY()` (RS_Cane_Monitoring_S1.html:6988-7052) — aligns
+ * selected seasons by Days After Planting instead of calendar date, one
+ * Good/Moderate/Need-Attention line per season (dash pattern distinguishes
+ * seasons; color still encodes the health category). Health-status only —
+ * "Crop stage YoY isn't meaningful the same way, since stage composition
+ * by DAP is already roughly fixed by the threshold config" per the source's
+ * own comment. Reuses each field's already-computed latest reading
+ * (`FieldGeo.healthStatus`/`growthDays`) rather than re-deriving per-
+ * observation history, since YoY only ever looks at each field's current
+ * status grouped by which season it was planted in. */
+export function computeHealthTrendYoY(
+  fields: Field[],
+  geoByCode: Record<string, FieldGeo>,
+  seasonYears: number[],
+): YoYSeries[] {
+  const sortedYears = [...seasonYears].sort((a, b) => a - b)
+  const series: YoYSeries[] = []
+
+  sortedYears.forEach((year, sIdx) => {
+    const seasonFields = fields.filter((f) => seasonStartYearFor(f.plantDateRaw) === year)
+    const buckets: Record<number, { good: number; optimal: number; attention: number; total: number }> = {}
+
+    for (const field of seasonFields) {
+      const geo = geoByCode[field.code]
+      if (!geo || geo.ndvi == null || geo.growthDays == null) continue
+      const cat = geo.healthStatus === 'attention' || geo.healthStatus === 'serious' ? 'attention' : geo.healthStatus
+      if (cat !== 'good' && cat !== 'optimal' && cat !== 'attention') continue
+      const b = Math.floor(geo.growthDays / AGE_BUCKET_DAYS)
+      buckets[b] ??= { good: 0, optimal: 0, attention: 0, total: 0 }
+      buckets[b][cat]++
+      buckets[b].total++
+    }
+
+    const bucketKeys = Object.keys(buckets)
+      .map(Number)
+      .sort((a, b) => a - b)
+    const seasonLabel = seasonLabelForYear(year)
+
+    HEALTH_CATS.forEach((c) => {
+      series.push({
+        key: `${year}-${c.key}`,
+        label: `${seasonLabel} — ${c.label}`,
+        color: c.color,
+        dash: YOY_DASH[sIdx % YOY_DASH.length],
+        points: bucketKeys.map((b) => ({
+          x: b * AGE_BUCKET_DAYS + AGE_BUCKET_DAYS / 2,
+          count: buckets[b][c.key as 'good' | 'optimal' | 'attention'],
+          total: buckets[b].total,
+        })),
+      })
+    })
+  })
+
+  return series
 }

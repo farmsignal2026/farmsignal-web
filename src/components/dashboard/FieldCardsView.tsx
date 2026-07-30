@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { HEALTH_BADGE_CLASS, HEALTH_LABEL, stageBadgeClass } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { NdviSparkline } from './NdviSparkline'
+import { NdviTrendModal } from './NdviTrendModal'
 
 const CARDS_PAGE_SIZE = 50
 
@@ -13,12 +15,14 @@ interface FieldCardsViewProps {
 }
 
 /** Ports `renderCards()` (RS_Cane_Monitoring_S1.html:4790+) — latest-only
- * per Phase 2's agreed scope (no expandable per-observation history, no
- * sparkline chart; a simple NDVI delta indicator stands in for it). */
+ * per Phase 2's agreed scope (no expandable per-observation history table),
+ * with a real NDVI sparkline per card (Phase 3) that opens a single-plot
+ * trend popup on click, instead of showing all plots crowded on one chart. */
 export function FieldCardsView({ fields, geoByCode }: FieldCardsViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>('plantDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
+  const [trendField, setTrendField] = useState<Field | null>(null)
 
   const sorted = useMemo(() => {
     const arr = [...fields]
@@ -79,7 +83,12 @@ export function FieldCardsView({ fields, geoByCode }: FieldCardsViewProps) {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {pageFields.map((field) => (
-          <FieldCard key={field.code} field={field} geo={geoByCode[field.code]} />
+          <FieldCard
+            key={field.code}
+            field={field}
+            geo={geoByCode[field.code]}
+            onOpenTrend={() => setTrendField(field)}
+          />
         ))}
       </div>
 
@@ -106,17 +115,28 @@ export function FieldCardsView({ fields, geoByCode }: FieldCardsViewProps) {
           </button>
         </div>
       )}
+
+      {trendField && (
+        <NdviTrendModal field={trendField} geo={geoByCode[trendField.code]} onClose={() => setTrendField(null)} />
+      )}
     </div>
   )
 }
 
-function FieldCard({ field, geo }: { field: Field; geo: FieldGeo | undefined }) {
+function FieldCard({
+  field,
+  geo,
+  onOpenTrend,
+}: {
+  field: Field
+  geo: FieldGeo | undefined
+  onOpenTrend: () => void
+}) {
   const ndviRange =
     geo?.thresholdMin != null && geo?.thresholdMax != null
       ? `${geo.thresholdMin.toFixed(2)} - ${geo.thresholdMax.toFixed(2)}`
       : 'N/A'
   const latestHistory = geo?.history[geo.history.length - 1]
-  const delta = geo?.ndvi != null && geo?.prevNdvi != null ? geo.ndvi - geo.prevNdvi : null
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-3">
@@ -183,11 +203,14 @@ function FieldCard({ field, geo }: { field: Field; geo: FieldGeo | undefined }) 
         <span className="text-[10px] text-neutral-400">{ndviRange}</span>
       </div>
 
-      {delta !== null && (
-        <div className={`mt-1.5 text-[10px] font-semibold ${delta < 0 ? 'text-red-600' : 'text-green-600'}`}>
-          {delta < 0 ? '▼' : '▲'} {Math.abs(delta).toFixed(3)} vs previous
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={onOpenTrend}
+        className="mt-2 w-full rounded-md border border-neutral-100 bg-neutral-50 py-1 hover:border-neutral-200"
+        title="View NDVI trend"
+      >
+        <NdviSparkline field={field} geo={geo} />
+      </button>
     </div>
   )
 }

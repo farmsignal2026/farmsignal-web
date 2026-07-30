@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { stages } from '../../features/fields/growthStage'
 import type { HealthStatus } from '../../features/fields/growthStage'
-import { HEALTH_LABEL } from '../../features/fields/badgeStyles'
+import { HEALTH_COLOR_HEX, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
 
 interface StageSummaryViewProps {
@@ -16,14 +16,6 @@ const STAGE_COLOR_HEX: Record<string, string> = {
   Tillering: '#0d9488',
   'Grand Growth': '#f59e0b',
   Maturity: '#9ca3af',
-}
-
-const HEALTH_COLOR_HEX: Record<HealthStatus, string> = {
-  good: '#22a65a',
-  optimal: '#f59e0b',
-  attention: '#b45309',
-  serious: '#dc2626',
-  unknown: '#d1d5db',
 }
 
 interface Segment {

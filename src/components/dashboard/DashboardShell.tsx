@@ -4,7 +4,9 @@ import type { StatCardKey } from '../../features/fields/computeFieldStats'
 import { filterFields } from '../../features/fields/filterFields'
 import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
 import { FieldCardsView } from './FieldCardsView'
+import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
+import { NdviTrendView } from './NdviTrendView'
 import { EMPTY_FILTERS, Sidebar, type SidebarFilters } from './Sidebar'
 import { StageSummaryView } from './StageSummaryView'
 import { StatRow } from './StatRow'
@@ -106,9 +108,13 @@ export function DashboardShell() {
                       onViewPlotInCards={viewPlotInCards}
                     />
                   )}
-                  {activeTab !== 'cards' && activeTab !== 'table' && activeTab !== 'summary' && (
-                    <TabPanel tab={activeTab} />
-                  )}
+                  {activeTab === 'chart' && <NdviTrendView fields={filteredFields} geoByCode={geoByCode} />}
+                  {activeTab === 'map' && <FieldMapView fields={filteredFields} geoByCode={geoByCode} />}
+                  {activeTab !== 'cards' &&
+                    activeTab !== 'table' &&
+                    activeTab !== 'summary' &&
+                    activeTab !== 'chart' &&
+                    activeTab !== 'map' && <TabPanel tab={activeTab} />}
                 </div>
               </div>
             </>

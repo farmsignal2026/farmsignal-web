@@ -11,6 +11,18 @@ export const HEALTH_LABEL: Record<HealthStatus, string> = {
   unknown: 'Unknown',
 }
 
+/** Canonical health-status hex colors, user-specified (not derived from the
+ * HTML source's own amber/red scheme) — single source of truth so the stat
+ * row, Stage Summary, and Field Map all agree. Don't "correct" these back
+ * toward RS_Cane_Monitoring_S1.html's HEALTH_COLORS; that's intentional. */
+export const HEALTH_COLOR_HEX: Record<HealthStatus, string> = {
+  good: '#22c55e',
+  optimal: '#f97316',
+  attention: '#ef4444',
+  serious: '#7f1d1d',
+  unknown: '#9ca3af',
+}
+
 export const HEALTH_BADGE_CLASS: Record<HealthStatus, string> = {
   good: 'bg-green-50 text-green-600 border border-green-200',
   optimal: 'bg-amber-50 text-amber-600 border border-amber-100',
@@ -32,4 +44,20 @@ export const STAGE_BADGE_CLASS: Record<string, string> = {
 
 export function stageBadgeClass(stageName: string): string {
   return STAGE_BADGE_CLASS[stageName] ?? 'bg-neutral-100 text-neutral-500 border border-neutral-200'
+}
+
+/** Hex equivalents of STAGE_BADGE_CLASS, for contexts that can't use
+ * Tailwind classes (canvas-drawn chart bands via stageBandsPlugin). Same
+ * underlying palette as index.css's ported color scale, just as literal
+ * hex since <canvas> can't resolve CSS custom properties. */
+export const STAGE_BAND_COLOR: Record<string, { fill: string; text: string }> = {
+  Germination: { fill: '#eff6ff', text: '#1d4ed8' },
+  'Early Tiller': { fill: '#f5f3ff', text: '#7c3aed' },
+  Tillering: { fill: '#f0fdfa', text: '#0d9488' },
+  'Grand Growth': { fill: '#fffbeb', text: '#b45309' },
+  Maturity: { fill: '#f3f4f6', text: '#4b5563' },
+}
+
+export function stageBandColor(stageName: string): { fill: string; text: string } {
+  return STAGE_BAND_COLOR[stageName] ?? { fill: '#f3f4f6', text: '#6b7280' }
 }

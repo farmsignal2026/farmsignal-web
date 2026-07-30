@@ -7,7 +7,7 @@ interface FieldMapDetailPanelProps {
   field: Field
   geo: FieldGeo
   onClose: () => void
-  onOpenTrend: () => void
+  onOpenDetail: () => void
 }
 
 const WATCH_THRESHOLD = 0.1
@@ -16,8 +16,9 @@ const WATCH_THRESHOLD = 0.1
  * detail bottom sheet's content (Flutter `_FieldDetailSheet`,
  * 000_A_FarmSignal_APP_new.html `showFieldDetailPanel()` :4102-4203), laid
  * out as a fixed right-side panel (more screen space on desktop than a
- * mobile bottom sheet). No Navigate/Scout/View-Details buttons — see plan. */
-export function FieldMapDetailPanel({ field, geo, onClose, onOpenTrend }: FieldMapDetailPanelProps) {
+ * mobile bottom sheet). No Navigate button — see plan; Scout/photo history
+ * is one click away via the unified Field Detail modal instead. */
+export function FieldMapDetailPanel({ field, geo, onClose, onOpenDetail }: FieldMapDetailPanelProps) {
   const hasPixelData = geo.pixelDist.good + geo.pixelDist.optimal + geo.pixelDist.attention > 0
   const drop = geo.prevNdvi != null && geo.ndvi != null ? Number((geo.prevNdvi - geo.ndvi).toFixed(2)) : null
 
@@ -91,9 +92,9 @@ export function FieldMapDetailPanel({ field, geo, onClose, onOpenTrend }: FieldM
 
         <button
           type="button"
-          onClick={onOpenTrend}
+          onClick={onOpenDetail}
           className="w-full rounded-md border border-neutral-100 bg-neutral-50 py-1 hover:border-neutral-200"
-          title="Open full NDVI trend"
+          title="View field details"
         >
           <NdviSparkline field={field} geo={geo} height={40} />
         </button>

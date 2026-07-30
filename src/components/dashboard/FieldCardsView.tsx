@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { HEALTH_BADGE_CLASS, HEALTH_LABEL, stageBadgeClass } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { FieldDetailModal } from './FieldDetailModal'
 import { NdviSparkline } from './NdviSparkline'
-import { NdviTrendModal } from './NdviTrendModal'
 
 const CARDS_PAGE_SIZE = 50
 
@@ -12,17 +12,19 @@ type SortDir = 'asc' | 'desc'
 interface FieldCardsViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
+  onViewOnMap: (plotCode: string) => void
 }
 
 /** Ports `renderCards()` (RS_Cane_Monitoring_S1.html:4790+) — latest-only
  * per Phase 2's agreed scope (no expandable per-observation history table),
- * with a real NDVI sparkline per card (Phase 3) that opens a single-plot
- * trend popup on click, instead of showing all plots crowded on one chart. */
-export function FieldCardsView({ fields, geoByCode }: FieldCardsViewProps) {
+ * with a real NDVI sparkline per card (Phase 3). Clicking a card opens the
+ * unified Field Detail popup (NDVI trend, Scout/Follow-up history, Geotag
+ * photos, View on Map). */
+export function FieldCardsView({ fields, geoByCode, onViewOnMap }: FieldCardsViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>('plantDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
-  const [trendField, setTrendField] = useState<Field | null>(null)
+  const [detailField, setDetailField] = useState<Field | null>(null)
 
   const sorted = useMemo(() => {
     const arr = [...fields]
@@ -87,7 +89,7 @@ export function FieldCardsView({ fields, geoByCode }: FieldCardsViewProps) {
             key={field.code}
             field={field}
             geo={geoByCode[field.code]}
-            onOpenTrend={() => setTrendField(field)}
+            onOpenDetail={() => setDetailField(field)}
           />
         ))}
       </div>
@@ -116,8 +118,13 @@ export function FieldCardsView({ fields, geoByCode }: FieldCardsViewProps) {
         </div>
       )}
 
-      {trendField && (
-        <NdviTrendModal field={trendField} geo={geoByCode[trendField.code]} onClose={() => setTrendField(null)} />
+      {detailField && (
+        <FieldDetailModal
+          field={detailField}
+          geo={geoByCode[detailField.code]}
+          onClose={() => setDetailField(null)}
+          onViewOnMap={() => onViewOnMap(detailField.code)}
+        />
       )}
     </div>
   )
@@ -126,11 +133,11 @@ export function FieldCardsView({ fields, geoByCode }: FieldCardsViewProps) {
 function FieldCard({
   field,
   geo,
-  onOpenTrend,
+  onOpenDetail,
 }: {
   field: Field
   geo: FieldGeo | undefined
-  onOpenTrend: () => void
+  onOpenDetail: () => void
 }) {
   const ndviRange =
     geo?.thresholdMin != null && geo?.thresholdMax != null
@@ -139,7 +146,16 @@ function FieldCard({
   const latestHistory = geo?.history[geo.history.length - 1]
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-3">
+    <div
+      onClick={onOpenDetail}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onOpenDetail()
+      }}
+      title="View field details"
+      className="cursor-pointer rounded-lg border border-neutral-200 bg-white p-3 hover:border-neutral-300"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-neutral-800">{field.name}</div>
@@ -203,14 +219,9 @@ function FieldCard({
         <span className="text-[10px] text-neutral-400">{ndviRange}</span>
       </div>
 
-      <button
-        type="button"
-        onClick={onOpenTrend}
-        className="mt-2 w-full rounded-md border border-neutral-100 bg-neutral-50 py-1 hover:border-neutral-200"
-        title="View NDVI trend"
-      >
+      <div className="mt-2 w-full rounded-md border border-neutral-100 bg-neutral-50 py-1">
         <NdviSparkline field={field} geo={geo} />
-      </button>
+      </div>
     </div>
   )
 }

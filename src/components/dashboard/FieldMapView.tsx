@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { MapContainer, Marker, Polygon, ImageOverlay, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import { HEALTH_COLOR_HEX } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { FieldDetailModal } from './FieldDetailModal'
 import { FieldMapDetailPanel } from './FieldMapDetailPanel'
-import { NdviTrendModal } from './NdviTrendModal'
 
 const ZOOM_THRESHOLD = 16
 const RASTER_BUF_DEG = 0.0003
@@ -25,19 +25,26 @@ interface MappedField {
 interface FieldMapViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
+  /** When set, the map opens centered on this field at zoom 17 instead of
+   * fitting all mapped fields — matches Flutter map_screen.dart's own
+   * `focusPlotCode` handling (initial view only; the detail panel doesn't
+   * auto-open, same as Flutter — the user still clicks the marker). */
+  focusPlotCode?: string | null
 }
 
 /** Field Map tab — react-leaflet, mirroring the already-verified Flutter
  * map screen (farmsignal_flutter/lib/features/map/presentation/map_screen.dart):
  * satellite/street toggle, zoom-dependent layers (colored dots below zoom
  * 16, real polygons + NDVI mosaic overlays at/above it), click-to-select
- * detail panel. No Navigate/Scout buttons — not a fit for this desk-based
- * dashboard / no scouting flow exists in this app yet (see plan). */
-export function FieldMapView({ fields, geoByCode }: FieldMapViewProps) {
+ * detail panel. No Navigate button — not a fit for this desk-based
+ * dashboard; Scout/photo history is one click away via the unified Field
+ * Detail modal instead (see plan). */
+export function FieldMapView({ fields, geoByCode, focusPlotCode }: FieldMapViewProps) {
   const [satellite, setSatellite] = useState(true)
-  const [zoom, setZoom] = useState(DEFAULT_ZOOM)
+  const focusGeo = focusPlotCode ? geoByCode[focusPlotCode] : undefined
+  const [zoom, setZoom] = useState(focusGeo?.centroid ? 17 : DEFAULT_ZOOM)
   const [selectedCode, setSelectedCode] = useState<string | null>(null)
-  const [trendCode, setTrendCode] = useState<string | null>(null)
+  const [detailCode, setDetailCode] = useState<string | null>(null)
 
   const mappedFields = useMemo<MappedField[]>(() => {
     const result: MappedField[] = []
@@ -55,8 +62,8 @@ export function FieldMapView({ fields, geoByCode }: FieldMapViewProps) {
   return (
     <div className="relative" style={{ height: 600 }}>
       <MapContainer
-        center={DEFAULT_CENTER}
-        zoom={DEFAULT_ZOOM}
+        center={focusGeo?.centroid ?? DEFAULT_CENTER}
+        zoom={focusGeo?.centroid ? 17 : DEFAULT_ZOOM}
         scrollWheelZoom
         style={{ height: '100%', width: '100%' }}
       >
@@ -67,7 +74,7 @@ export function FieldMapView({ fields, geoByCode }: FieldMapViewProps) {
         )}
 
         <ZoomTracker onZoomChange={setZoom} />
-        <FitBoundsOnData fields={mappedFields} />
+        {!focusGeo?.centroid && <FitBoundsOnData fields={mappedFields} />}
 
         {zoom < ZOOM_THRESHOLD &&
           mappedFields.map((m) => (
@@ -139,15 +146,18 @@ export function FieldMapView({ fields, geoByCode }: FieldMapViewProps) {
           field={selected.field}
           geo={selected.geo}
           onClose={() => setSelectedCode(null)}
-          onOpenTrend={() => setTrendCode(selected.field.code)}
+          onOpenDetail={() => setDetailCode(selected.field.code)}
         />
       )}
 
-      {trendCode && (
-        <NdviTrendModal
-          field={mappedFields.find((m) => m.field.code === trendCode)!.field}
-          geo={geoByCode[trendCode]}
-          onClose={() => setTrendCode(null)}
+      {detailCode && (
+        <FieldDetailModal
+          field={mappedFields.find((m) => m.field.code === detailCode)!.field}
+          geo={geoByCode[detailCode]}
+          onClose={() => setDetailCode(null)}
+          onViewOnMap={() => {
+            /* already on Field Map — nothing extra to do */
+          }}
         />
       )}
     </div>

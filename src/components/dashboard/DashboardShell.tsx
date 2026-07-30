@@ -23,6 +23,7 @@ export function DashboardShell() {
   const [filters, setFilters] = useState<SidebarFilters>(EMPTY_FILTERS)
   const [activeTab, setActiveTab] = useState<TabKey>('trend')
   const [statFilter, setStatFilter] = useState<StatCardKey | null>(null)
+  const [mapFocusPlot, setMapFocusPlot] = useState<string | null>(null)
 
   // Sidebar-filtered only (no stat-card category applied) — the stat row
   // itself always reflects this, matching renderStats(filteredRows) in the
@@ -42,6 +43,19 @@ export function DashboardShell() {
   const viewPlotInCards = (plotCode: string) => {
     setFilters({ ...EMPTY_FILTERS, plot: plotCode })
     setActiveTab('cards')
+  }
+
+  const viewPlotOnMap = (plotCode: string) => {
+    setMapFocusPlot(plotCode)
+    setActiveTab('map')
+  }
+
+  // Clicking a tab button directly (as opposed to "View on Map") should
+  // always land on the default fit-all view, not a stale focused field
+  // left over from a previous "View on Map" click.
+  const handleTabSelect = (tab: TabKey) => {
+    setMapFocusPlot(null)
+    setActiveTab(tab)
   }
 
   const brandName = user?.clientCode ?? 'FarmSignal'
@@ -97,9 +111,11 @@ export function DashboardShell() {
                 onSelectFilter={setStatFilter}
               />
               <div>
-                <TabBar active={activeTab} onSelect={setActiveTab} />
+                <TabBar active={activeTab} onSelect={handleTabSelect} />
                 <div className="rounded-b-md border border-t-0 border-neutral-200 bg-white">
-                  {activeTab === 'cards' && <FieldCardsView fields={filteredFields} geoByCode={geoByCode} />}
+                  {activeTab === 'cards' && (
+                    <FieldCardsView fields={filteredFields} geoByCode={geoByCode} onViewOnMap={viewPlotOnMap} />
+                  )}
                   {activeTab === 'table' && <FieldTableView fields={filteredFields} geoByCode={geoByCode} />}
                   {activeTab === 'summary' && (
                     <StageSummaryView
@@ -109,7 +125,9 @@ export function DashboardShell() {
                     />
                   )}
                   {activeTab === 'chart' && <NdviTrendView fields={filteredFields} geoByCode={geoByCode} />}
-                  {activeTab === 'map' && <FieldMapView fields={filteredFields} geoByCode={geoByCode} />}
+                  {activeTab === 'map' && (
+                    <FieldMapView fields={filteredFields} geoByCode={geoByCode} focusPlotCode={mapFocusPlot} />
+                  )}
                   {activeTab !== 'cards' &&
                     activeTab !== 'table' &&
                     activeTab !== 'summary' &&

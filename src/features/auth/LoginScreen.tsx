@@ -32,6 +32,7 @@ export function LoginScreen() {
     <div className="flex min-h-screen items-center justify-center bg-neutral-900 px-4">
       <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-xl">
         <div className="mb-6 text-center">
+          <img src="/logonew.jpg" alt="FarmSignal" className="mx-auto mb-3 h-16 w-16 object-contain" />
           <h1 className="text-xl font-bold text-neutral-800">FarmSignal Dashboard</h1>
           <p className="mt-1 text-sm text-neutral-500">Sign in to load field data</p>
         </div>

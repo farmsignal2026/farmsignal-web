@@ -98,7 +98,8 @@ export function DashboardShell() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#eef0f3]">
-      <nav className="flex items-center gap-4 border-b border-neutral-200 bg-white px-4 py-3">
+      <nav className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
+        <img src="/logonew.jpg" alt="FarmSignal" className="h-10 w-10 shrink-0 object-contain" />
         <div>
           <div className="text-sm font-bold text-neutral-800">{brandName}</div>
           <div className="text-[10px] font-medium tracking-wide text-neutral-400">

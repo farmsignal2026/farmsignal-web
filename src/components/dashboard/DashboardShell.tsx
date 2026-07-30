@@ -6,6 +6,7 @@ import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fie
 import { FieldCardsView } from './FieldCardsView'
 import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
+import { HealthTrendView } from './HealthTrendView'
 import { NdviTrendView } from './NdviTrendView'
 import { EMPTY_FILTERS, Sidebar, type SidebarFilters } from './Sidebar'
 import { StageSummaryView } from './StageSummaryView'
@@ -113,6 +114,7 @@ export function DashboardShell() {
               <div>
                 <TabBar active={activeTab} onSelect={handleTabSelect} />
                 <div className="rounded-b-md border border-t-0 border-neutral-200 bg-white">
+                  {activeTab === 'trend' && <HealthTrendView fields={filteredFields} geoByCode={geoByCode} />}
                   {activeTab === 'cards' && (
                     <FieldCardsView fields={filteredFields} geoByCode={geoByCode} onViewOnMap={viewPlotOnMap} />
                   )}
@@ -128,7 +130,8 @@ export function DashboardShell() {
                   {activeTab === 'map' && (
                     <FieldMapView fields={filteredFields} geoByCode={geoByCode} focusPlotCode={mapFocusPlot} />
                   )}
-                  {activeTab !== 'cards' &&
+                  {activeTab !== 'trend' &&
+                    activeTab !== 'cards' &&
                     activeTab !== 'table' &&
                     activeTab !== 'summary' &&
                     activeTab !== 'chart' &&

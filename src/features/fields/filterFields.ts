@@ -21,6 +21,7 @@ export function filterFields(
   if (filters.village) result = result.filter((f) => f.village === filters.village)
   if (filters.farmers.length > 0) result = result.filter((f) => filters.farmers.includes(f.name))
   if (filters.plot) result = result.filter((f) => f.code === filters.plot)
+  if (filters.plots.length > 0) result = result.filter((f) => filters.plots.includes(f.code))
   if (filters.plotType) result = result.filter((f) => f.type === filters.plotType)
   if (filters.variety) result = result.filter((f) => f.variety === filters.variety)
 

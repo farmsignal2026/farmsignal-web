@@ -49,6 +49,11 @@ export function DashboardShell() {
     setActiveTab('cards')
   }
 
+  const viewPlotsInCards = (plotCodes: string[]) => {
+    setFilters({ ...EMPTY_FILTERS, plots: plotCodes })
+    setActiveTab('cards')
+  }
+
   const viewPlotOnMap = (plotCode: string) => {
     setMapFocusPlot(plotCode)
     setActiveTab('map')
@@ -181,6 +186,7 @@ export function DashboardShell() {
                       fields={filteredFields}
                       geoByCode={geoByCode}
                       onViewPlotInCards={viewPlotInCards}
+                      onViewPlotsInCards={viewPlotsInCards}
                     />
                   )}
                   {activeTab === 'chart' && (

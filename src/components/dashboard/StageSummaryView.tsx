@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { classifyHistory } from '../../features/fields/classifyHistory'
 import { stages } from '../../features/fields/growthStage'
 import type { HealthStatus } from '../../features/fields/growthStage'
@@ -9,6 +9,7 @@ interface StageSummaryViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
   onViewPlotInCards: (plotCode: string) => void
+  onViewPlotsInCards: (plotCodes: string[]) => void
 }
 
 const STAGE_COLOR_HEX: Record<string, string> = {
@@ -30,7 +31,9 @@ interface Segment {
  * RS_Cane_Monitoring_S1.html:5219-5241) and the Persistent Issues list
  * (:5317-5342). The Farmer Performance Score ranking system is deferred
  * per Phase 2's agreed scope. */
-export function StageSummaryView({ fields, geoByCode, onViewPlotInCards }: StageSummaryViewProps) {
+export function StageSummaryView({ fields, geoByCode, onViewPlotInCards, onViewPlotsInCards }: StageSummaryViewProps) {
+  const [issuesSelected, setIssuesSelected] = useState<Set<string>>(new Set())
+  const [goodSelected, setGoodSelected] = useState<Set<string>>(new Set())
   const stageSegments = useMemo<Segment[]>(() => {
     const counts: Record<string, number> = {}
     for (const f of fields) {
@@ -81,10 +84,18 @@ export function StageSummaryView({ fields, geoByCode, onViewPlotInCards }: Stage
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <SummaryCard title="Persistent Issues — longest Need-Attention streaks">
+          <SelectionHeader
+            items={persistentIssues}
+            selected={issuesSelected}
+            onChange={setIssuesSelected}
+            onViewSelected={() => onViewPlotsInCards([...issuesSelected])}
+          />
           <StreakList
             items={persistentIssues}
             geoByCode={geoByCode}
             onViewPlotInCards={onViewPlotInCards}
+            selected={issuesSelected}
+            onToggleSelect={(code) => toggleSelection(setIssuesSelected, code)}
             emptyMessage="No plots currently in Need Attention."
             badgeClass={({ field }) => (field.healthStatus === 'serious' ? 'bg-red-50 text-red-600' : 'bg-amber-100 text-amber-800')}
             badgeText={({ field, streak }) => `${streak} obs${field.healthStatus === 'serious' ? ' · serious' : ''}`}
@@ -92,16 +103,75 @@ export function StageSummaryView({ fields, geoByCode, onViewPlotInCards }: Stage
         </SummaryCard>
 
         <SummaryCard title="Consistent Good Performance — longest Good streaks">
+          <SelectionHeader
+            items={consistentGood}
+            selected={goodSelected}
+            onChange={setGoodSelected}
+            onViewSelected={() => onViewPlotsInCards([...goodSelected])}
+          />
           <StreakList
             items={consistentGood}
             geoByCode={geoByCode}
             onViewPlotInCards={onViewPlotInCards}
+            selected={goodSelected}
+            onToggleSelect={(code) => toggleSelection(setGoodSelected, code)}
             emptyMessage="No plots currently on a Good streak."
             badgeClass={() => 'bg-green-50 text-green-600'}
             badgeText={({ streak }) => `${streak} obs · good`}
           />
         </SummaryCard>
       </div>
+    </div>
+  )
+}
+
+function toggleSelection(setSelected: (updater: (prev: Set<string>) => Set<string>) => void, code: string) {
+  setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(code)) next.delete(code)
+    else next.add(code)
+    return next
+  })
+}
+
+/** "Select all" checkbox + "View N selected in Field Cards" action, shared
+ * by both streak lists — lets a user pick several plots from this ranked
+ * list and open them together in Field Cards instead of clicking through
+ * one at a time. */
+function SelectionHeader({
+  items,
+  selected,
+  onChange,
+  onViewSelected,
+}: {
+  items: StreakItem[]
+  selected: Set<string>
+  onChange: (next: Set<string>) => void
+  onViewSelected: () => void
+}) {
+  if (items.length === 0) return null
+  const allSelected = items.length > 0 && items.every((i) => selected.has(i.field.code))
+
+  return (
+    <div className="mb-2 flex items-center justify-between gap-2 border-b border-neutral-100 pb-2">
+      <label className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-500">
+        <input
+          type="checkbox"
+          checked={allSelected}
+          onChange={() => onChange(allSelected ? new Set() : new Set(items.map((i) => i.field.code)))}
+          className="h-3.5 w-3.5 rounded border-neutral-300"
+        />
+        Select all ({items.length})
+      </label>
+      {selected.size > 0 && (
+        <button
+          type="button"
+          onClick={onViewSelected}
+          className="rounded-md bg-green-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-green-700"
+        >
+          View {selected.size} in Field cards →
+        </button>
+      )}
     </div>
   )
 }
@@ -115,6 +185,8 @@ function StreakList({
   items,
   geoByCode,
   onViewPlotInCards,
+  selected,
+  onToggleSelect,
   emptyMessage,
   badgeClass,
   badgeText,
@@ -122,6 +194,8 @@ function StreakList({
   items: StreakItem[]
   geoByCode: Record<string, FieldGeo>
   onViewPlotInCards: (plotCode: string) => void
+  selected: Set<string>
+  onToggleSelect: (plotCode: string) => void
   emptyMessage: string
   badgeClass: (item: StreakItem) => string
   badgeText: (item: StreakItem) => string
@@ -135,25 +209,33 @@ function StreakList({
         const { field } = item
         const geo = geoByCode[field.code]
         return (
-          <button
-            key={field.code}
-            type="button"
-            onClick={() => onViewPlotInCards(field.code)}
-            className="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-neutral-50"
-            title="Open this plot in Field cards"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-semibold text-neutral-700">{field.name}</div>
-              <div className="truncate text-[10px] text-neutral-400">
-                {field.code}
-                {field.division ? ` · ${field.division}` : ''}
+          <div key={field.code} className="flex items-center gap-2 py-2 hover:bg-neutral-50">
+            <input
+              type="checkbox"
+              checked={selected.has(field.code)}
+              onChange={() => onToggleSelect(field.code)}
+              className="h-3.5 w-3.5 shrink-0 rounded border-neutral-300"
+              aria-label={`Select ${field.name}`}
+            />
+            <button
+              type="button"
+              onClick={() => onViewPlotInCards(field.code)}
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+              title="Open this plot in Field cards"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-semibold text-neutral-700">{field.name}</div>
+                <div className="truncate text-[10px] text-neutral-400">
+                  {field.code}
+                  {field.division ? ` · ${field.division}` : ''}
+                </div>
               </div>
-            </div>
-            <div className="shrink-0 text-right">
-              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${badgeClass(item)}`}>{badgeText(item)}</span>
-              <div className="mt-0.5 text-[10px] text-neutral-400">NDVI {geo?.ndvi != null ? geo.ndvi.toFixed(2) : '--'}</div>
-            </div>
-          </button>
+              <div className="shrink-0 text-right">
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${badgeClass(item)}`}>{badgeText(item)}</span>
+                <div className="mt-0.5 text-[10px] text-neutral-400">NDVI {geo?.ndvi != null ? geo.ndvi.toFixed(2) : '--'}</div>
+              </div>
+            </button>
+          </div>
         )
       })}
     </div>

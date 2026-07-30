@@ -12,6 +12,11 @@ export interface SidebarFilters {
   division: string
   village: string
   plot: string
+  /** Multiple plot codes selected elsewhere (e.g. Health Summary's
+   * multi-select lists) — a separate dimension from the single-value
+   * `plot` search filter above, same relationship as `farmers`/no
+   * single-farmer equivalent. */
+  plots: string[]
   plotType: string
   variety: string
   cropStage: string
@@ -26,6 +31,7 @@ export const EMPTY_FILTERS: SidebarFilters = {
   division: '',
   village: '',
   plot: '',
+  plots: [],
   plotType: '',
   variety: '',
   cropStage: '',

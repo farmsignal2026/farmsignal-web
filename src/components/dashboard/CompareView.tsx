@@ -22,7 +22,7 @@ interface CompareViewProps {
 
 type ViewAs = 'count' | 'pct' | 'matrix' | 'yoy'
 
-const GROUP_KEYS: CompareGroupKey[] = ['client', 'division', 'farmer', 'plotType', 'stage', 'variety']
+const GROUP_KEYS: CompareGroupKey[] = ['client', 'factory', 'division', 'farmer', 'plotType', 'stage', 'variety']
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -443,7 +443,10 @@ function StageMatrixTable({
                         <div style={{ width: `${modPct}%`, backgroundColor: HEALTH_COLOR_HEX.optimal }} />
                         <div style={{ width: `${attPct}%`, backgroundColor: HEALTH_COLOR_HEX.attention }} />
                       </div>
-                      <div className="mt-0.5 text-[10px] text-neutral-400">{cell.total} obs</div>
+                      <div className="mt-0.5 text-[10px] text-neutral-400">
+                        {Math.round(goodPct)}% / {Math.round(modPct)}% / {Math.round(attPct)}%
+                      </div>
+                      <div className="text-[10px] text-neutral-400">{cell.total} obs</div>
                     </td>
                   )
                 })}

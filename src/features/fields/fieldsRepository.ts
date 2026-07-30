@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
+  applySpikeGuardEscalation,
   computeAttentionStreak,
   seriousStreakThreshold,
   spikeGuardLatest,
@@ -104,7 +105,7 @@ export class FieldsRepository {
       from += 1000
     }
 
-    const boundaryByPlot: Record<string, { polygon: [number, number][]; centroid: [number, number] }> = {}
+    const boundaryByPlot: Record<string, { polygon: [number, number][]; centroid: [number, number]; gpsAcre: number | null }> = {}
     const { data: bndData } = await this.client.rpc('get_plot_boundaries')
     for (const row of (bndData ?? []) as Record<string, unknown>[]) {
       const geojsonStr = row.geojson as string | null
@@ -114,7 +115,8 @@ export class FieldsRepository {
         if (!ring.length) continue
         const lat = ring.reduce((s, c) => s + c[0], 0) / ring.length
         const lng = ring.reduce((s, c) => s + c[1], 0) / ring.length
-        boundaryByPlot[row.plot_no as string] = { polygon: ring, centroid: [lat, lng] }
+        const gpsAcreRaw = row.gps_area_acres as number | null
+        boundaryByPlot[row.plot_no as string] = { polygon: ring, centroid: [lat, lng], gpsAcre: gpsAcreRaw ?? null }
       } catch {
         // Malformed geometry for this plot — skip it.
       }
@@ -171,7 +173,11 @@ export class FieldsRepository {
       const plantDateStr = p.planting_date as string | null
       const plantDate = plantDateStr ? new Date(plantDateStr) : null
       const boundary = boundaryByPlot[pid]
-      const history = ndviByPlot[pid] ?? []
+      // Escalation must run on the field's FULL history before anything
+      // downstream (age-basis reading, prevNdvi, spikeGuardLatest, streak
+      // counting, the per-observation classified chart) reads
+      // `isLowConfidence` — see applySpikeGuardEscalation's docstring.
+      const history = applySpikeGuardEscalation(ndviByPlot[pid] ?? [])
 
       const factoryCode = (p.factory_code as string | null) ?? ''
       const divisionCode = (p.division_code as string | null) ?? ''
@@ -325,6 +331,7 @@ export class FieldsRepository {
         code: pid,
         centroid: boundary?.centroid ?? null,
         polygon: boundary?.polygon ?? null,
+        gpsAcre: boundary?.gpsAcre ?? null,
         ndvi,
         prevNdvi,
         healthStatus,

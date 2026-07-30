@@ -99,29 +99,62 @@ export interface SpikeGuardResult {
   observation: NdviObservation | null
 }
 
-/** Excludes low-confidence and S1-estimated rows from driving health status,
- * and treats a sudden >=0.15 NDVI drop as an unconfirmed spike unless the
- * next confirmed reading is within 0.15 of it (a sustained, real drop). */
-export function spikeGuardLatest(history: NdviObservation[]): SpikeGuardResult {
-  let lastConfNdvi: number | null = null
-  let latestConf: NdviObservation | null = null
+const SPIKE_DROP = 0.15
 
-  for (let i = 0; i < history.length; i++) {
-    const obs = history[i]
-    if (obs.isLowConfidence || obs.isS1) continue
+/** Ports "SPIKE GUARD WITH ESCALATION" (RS_Cane_Monitoring_S1.html:
+ * 2764-2808) — two passes over a field's full ascending-date history:
+ * Pass 1 flags any otherwise-confirmed reading that drops >=0.15 NDVI from
+ * the last confirmed baseline as low-confidence (the baseline doesn't
+ * advance past a flagged row, so a run of drops all compare against the
+ * same pre-drop peak). Pass 2 (escalation): for each ADJACENT pair that
+ * are both low-confidence and within 0.15 of each other, that's a
+ * sustained real decline, not cloud/sensor noise — restore both to
+ * confirmed. Crucially, Pass 2 treats the series' very last reading as a
+ * valid `curr` in a pair with its predecessor — a genuine decline landing
+ * on the newest reading CAN still be confirmed. A single-pass "does the
+ * next reading confirm this one" check (this function's earlier form)
+ * cannot do that: the newest reading has no "next" to confirm it, so any
+ * real decline that happens to be the latest available data would stay
+ * "unconfirmed" forever and the field would keep showing its old, better
+ * status — a real bug found via a live field where this app showed "Good"
+ * (NDVI 0.74, a month-old peak) while the source dashboard correctly
+ * showed "Need attention" (NDVI 0.41, the actual latest reading). */
+export function applySpikeGuardEscalation<T extends { ndvi: number; isLowConfidence: boolean; isS1: boolean }>(
+  history: T[],
+): T[] {
+  const rows = history.map((h) => ({ ...h }))
 
-    if (lastConfNdvi !== null && obs.ndvi - lastConfNdvi <= -0.15) {
-      const next = i + 1 < history.length ? history[i + 1] : null
-      if (next && !next.isLowConfidence && !next.isS1 && Math.abs(next.ndvi - obs.ndvi) <= 0.15) {
-        lastConfNdvi = obs.ndvi
-        latestConf = obs
-      }
-      // else: unconfirmed spike — don't update baseline.
+  let lastConfirmedNdvi: number | null = null
+  for (const r of rows) {
+    if (r.isLowConfidence || r.isS1) continue
+    if (lastConfirmedNdvi !== null && r.ndvi - lastConfirmedNdvi <= -SPIKE_DROP) {
+      r.isLowConfidence = true
     } else {
-      lastConfNdvi = obs.ndvi
-      latestConf = obs
+      lastConfirmedNdvi = r.ndvi
     }
   }
 
-  return { observation: latestConf }
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1]
+    const curr = rows[i]
+    if ((prev.isLowConfidence || prev.isS1) && (curr.isLowConfidence || curr.isS1) && Math.abs(curr.ndvi - prev.ndvi) <= SPIKE_DROP) {
+      prev.isLowConfidence = false
+      curr.isLowConfidence = false
+    }
+  }
+
+  return rows
+}
+
+/** The latest reading not flagged low-confidence/S1 — call
+ * `applySpikeGuardEscalation()` on the field's full history first so a
+ * genuine sustained decline landing on the newest reading has already been
+ * confirmed. Falls back to the raw latest reading if every reading is
+ * still unconfirmed, matching source's own "prefer confirmed, fall back to
+ * unconfirmed" comment (:7486-7488) rather than reporting no data at all. */
+export function spikeGuardLatest(history: NdviObservation[]): SpikeGuardResult {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (!history[i].isLowConfidence && !history[i].isS1) return { observation: history[i] }
+  }
+  return { observation: history.length > 0 ? history[history.length - 1] : null }
 }

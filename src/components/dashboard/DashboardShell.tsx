@@ -27,6 +27,7 @@ export function DashboardShell() {
   const [activeTab, setActiveTab] = useState<TabKey>('trend')
   const [statFilter, setStatFilter] = useState<StatCardKey | null>(null)
   const [mapFocusPlot, setMapFocusPlot] = useState<string | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   // Sidebar-filtered only (no stat-card category applied) — the stat row
   // itself always reflects this, matching renderStats(filteredRows) in the
@@ -57,6 +58,9 @@ export function DashboardShell() {
     switch (groupKey) {
       case 'client':
         setFilters({ ...EMPTY_FILTERS, client: groupValue })
+        break
+      case 'factory':
+        setFilters({ ...EMPTY_FILTERS, factory: groupValue })
         break
       case 'division':
         setFilters({ ...EMPTY_FILTERS, division: groupValue })
@@ -110,15 +114,32 @@ export function DashboardShell() {
         </button>
       </nav>
 
-      <div className="flex flex-1">
-        <Sidebar
-          fields={scopedFields}
-          filters={filters}
-          onChange={setFilters}
-          onOverviewClick={() => setActiveTab('trend')}
-        />
+      <div
+        className="grid flex-1"
+        style={{
+          gridTemplateColumns: `${sidebarCollapsed ? 0 : 256}px 16px 1fr`,
+          transition: 'grid-template-columns 300ms ease-in-out',
+        }}
+      >
+        <div className="overflow-hidden">
+          <Sidebar
+            fields={scopedFields}
+            filters={filters}
+            onChange={setFilters}
+            onOverviewClick={() => setActiveTab('trend')}
+          />
+        </div>
 
-        <main className="flex-1 space-y-4 p-4">
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? 'Show filters' : 'Hide filters'}
+          className="mt-3 flex h-9 w-4 items-center justify-center self-start justify-self-start rounded-r-md border border-l-0 border-neutral-200 bg-white text-[10px] text-neutral-400 shadow-sm hover:bg-neutral-50 hover:text-neutral-600"
+        >
+          {sidebarCollapsed ? '›' : '‹'}
+        </button>
+
+        <main className="min-w-0 space-y-4 p-4">
           {fieldsQuery.isLoading && (
             <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-400">
               Loading field data…

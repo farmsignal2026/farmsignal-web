@@ -54,6 +54,10 @@ export interface FieldGeo {
   code: string
   centroid: [number, number] | null
   polygon: [number, number][] | null
+  /** GPS-surveyed acreage from the boundary GeoJSON's own recorded area —
+   * more precise than `Field.area` (the Excel-recorded `area_acres`), when
+   * available. Null for plots with no boundary survey. */
+  gpsAcre: number | null
   ndvi: number | null
   prevNdvi: number | null
   healthStatus: HealthStatus

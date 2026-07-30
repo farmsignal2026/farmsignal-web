@@ -1,13 +1,15 @@
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
+import { areaFor } from './computeFieldStats'
 import { stageForAge, stages } from './growthStage'
 import { orderPlotTypes } from './plotTypeStyle'
 import { seasonLabelForYear, seasonStartYearFor } from './season'
 import type { Field, FieldGeo } from './types'
 
-export type CompareGroupKey = 'client' | 'division' | 'farmer' | 'plotType' | 'stage' | 'variety'
+export type CompareGroupKey = 'client' | 'factory' | 'division' | 'farmer' | 'plotType' | 'stage' | 'variety'
 
 export const COMPARE_GROUP_LABEL: Record<CompareGroupKey, string> = {
-  client: 'Mill / Client',
+  client: 'Client',
+  factory: 'Factory / Mill',
   division: 'Division',
   farmer: 'Farmer',
   plotType: 'Crop Type',
@@ -19,11 +21,19 @@ const WATCH_THRESHOLD = 0.1
 
 /** Ports the group-value extraction implicit in `renderCompare()`'s
  * `r[groupKey]` lookups (:7576) — 'stage' needs the field's current growth
- * stage from FieldGeo since Field itself doesn't carry it. */
+ * stage from FieldGeo since Field itself doesn't carry it. **Client and
+ * Factory/Mill are separate levels of the hierarchy** (Client > Factory >
+ * Division > Section > Village > Farmer > Plot) and must stay separate
+ * group-by dimensions — an earlier version conflated them under one
+ * "Mill / Client" button keyed on `clientCode` alone, which meant picking
+ * a Client in the sidebar and grouping by it collapsed every one of that
+ * client's factories into a single bar instead of breaking them out. */
 export function groupValueFor(field: Field, geoByCode: Record<string, FieldGeo>, key: CompareGroupKey): string {
   switch (key) {
     case 'client':
       return field.clientCode || 'Unknown'
+    case 'factory':
+      return field.factory || 'Unknown'
     case 'division':
       return field.division || 'Unknown'
     case 'farmer':
@@ -114,7 +124,14 @@ export function computeCompareCounts(
     buckets[group][status]++
     buckets[group].total++
 
-    if ((status === 'good' || status === 'optimal') && prev && prev.ndvi - observation.ndvi >= WATCH_THRESHOLD) {
+    if (
+      (status === 'good' || status === 'optimal') &&
+      prev &&
+      // Round before comparing — see isWatch()'s docstring in
+      // computeFieldStats.ts for why an unrounded floating-point
+      // subtraction can silently fail an exact-threshold comparison.
+      Number((prev.ndvi - observation.ndvi).toFixed(3)) >= WATCH_THRESHOLD
+    ) {
       buckets[group].watch++
     }
   }
@@ -145,8 +162,9 @@ export interface StageMatrixResult {
 
 /** Ports `renderCompareStageMatrix()` (:7288-7460) — tallies EVERY in-period
  * observation (not just latest) per (group, stage-at-that-observation)
- * cell, area-weighted via `field.area` (the same fallback the source uses
- * when no GPS-surveyed acreage exists), plus the per-group Score: average,
+ * cell, area-weighted via `areaFor()` (GPS-surveyed acreage, falling back
+ * to `field.area` when no boundary survey exists — same fallback source
+ * uses), plus the per-group Score: average,
  * across every stage the group has data for, of (that stage's avg NDVI /
  * that stage's optimal midpoint) x 100, each stage's contribution capped at
  * (stage max / midpoint) x 100 so one outlier stage can't inflate the
@@ -166,7 +184,7 @@ export function computeCompareStageMatrix(
     const rows = classifyHistory(field, geo)
     const group = groupValueFor(field, geoByCode, groupKey)
     meta[group] ??= { division: field.division, village: field.village }
-    const areaAc = Number.parseFloat(field.area) || 0
+    const areaAc = areaFor(field, geo)
 
     for (const row of rows) {
       if (row.date < start || row.date > end) continue
@@ -268,7 +286,14 @@ export function computeCompareYoY(
     const cell = cells[group][seasonLabel]
     cell[status]++
     cell.total++
-    if ((status === 'good' || status === 'optimal') && prev && prev.ndvi - observation.ndvi >= WATCH_THRESHOLD) {
+    if (
+      (status === 'good' || status === 'optimal') &&
+      prev &&
+      // Round before comparing — see isWatch()'s docstring in
+      // computeFieldStats.ts for why an unrounded floating-point
+      // subtraction can silently fail an exact-threshold comparison.
+      Number((prev.ndvi - observation.ndvi).toFixed(3)) >= WATCH_THRESHOLD
+    ) {
       cell.watch++
     }
   }

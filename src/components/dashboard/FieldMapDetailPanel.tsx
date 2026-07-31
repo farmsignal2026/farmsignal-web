@@ -1,6 +1,7 @@
 import { HEALTH_BADGE_CLASS, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
 import { GrowthStageTimeline } from './GrowthStageTimeline'
+import { NdviMapHistory } from './NdviMapHistory'
 import { NdviSparkline } from './NdviSparkline'
 
 interface FieldMapDetailPanelProps {
@@ -40,13 +41,7 @@ export function FieldMapDetailPanel({ field, geo, onClose, onOpenDetail }: Field
       </div>
 
       <div className="space-y-3 p-3">
-        {geo.pngUrl && (
-          <img
-            src={geo.pngUrl}
-            alt="NDVI mosaic"
-            className="max-h-40 w-full rounded-lg bg-[#F7F5F0] object-contain"
-          />
-        )}
+        <NdviMapHistory history={geo.history} />
 
         {drop !== null && drop >= WATCH_THRESHOLD && (
           <div className="rounded-md bg-red-50 px-2 py-1.5 text-[11px] font-semibold text-red-700">

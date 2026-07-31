@@ -5,6 +5,7 @@ import { usePhotos } from '../../features/photos/usePhotos'
 import { useScoutData } from '../../features/scout/useScoutData'
 import { recommendationGiven, type ScoutFollowup, type ScoutReport } from '../../features/scout/types'
 import { SuspicionAlerts } from './FieldCardsView'
+import { NdviMapHistory } from './NdviMapHistory'
 import { NdviTrendSection } from './NdviTrendSection'
 import { PhotoGrid } from './PhotoGrid'
 import { ScoutChecklistView, scoutReportRemarksLines } from './ScoutChecklistView'
@@ -95,6 +96,12 @@ export function FieldDetailModal({
               🗺️ View on Map
             </button>
           </Section>
+
+          {geo && geo.history.some((h) => h.pngUrl !== null) && (
+            <Section title="Satellite Map">
+              <NdviMapHistory history={geo.history} />
+            </Section>
+          )}
 
           <Section title="NDVI Trend">
             <NdviTrendSection field={field} geo={geo} />

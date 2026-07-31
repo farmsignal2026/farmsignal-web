@@ -4,12 +4,14 @@ import type { CompareGroupKey } from '../../features/fields/compare'
 import type { StatCardKey } from '../../features/fields/computeFieldStats'
 import { filterFields } from '../../features/fields/filterFields'
 import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
+import { useScoutData } from '../../features/scout/useScoutData'
 import { CompareView } from './CompareView'
 import { FieldCardsView } from './FieldCardsView'
 import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
 import { HealthTrendView } from './HealthTrendView'
 import { NdviTrendView } from './NdviTrendView'
+import { ScoutAnalyticsView } from './ScoutAnalyticsView'
 import { EMPTY_FILTERS, Sidebar, type SidebarFilters } from './Sidebar'
 import { StageSummaryView } from './StageSummaryView'
 import { StatRow } from './StatRow'
@@ -22,6 +24,7 @@ export function DashboardShell() {
   const fieldsQuery = useFieldsData()
   const scopedFields = useScopedFields()
   const geoByCode = useGeoByCode()
+  const scoutQuery = useScoutData()
 
   const [filters, setFilters] = useState<SidebarFilters>(EMPTY_FILTERS)
   const [activeTab, setActiveTab] = useState<TabKey>('trend')
@@ -178,6 +181,14 @@ export function DashboardShell() {
                       onViewGroupInCards={viewGroupInCards}
                     />
                   )}
+                  {activeTab === 'scoutAnalytics' &&
+                    (scoutQuery.isSuccess ? (
+                      <ScoutAnalyticsView fields={filteredFields} geoByCode={geoByCode} scoutData={scoutQuery.data} />
+                    ) : (
+                      <div className="p-10 text-center text-sm text-neutral-400">
+                        {scoutQuery.isLoading ? 'Loading scout data…' : 'Failed to load scout data.'}
+                      </div>
+                    ))}
                   {activeTab === 'cards' && (
                     <FieldCardsView fields={filteredFields} geoByCode={geoByCode} onViewOnMap={viewPlotOnMap} />
                   )}
@@ -198,6 +209,7 @@ export function DashboardShell() {
                   )}
                   {activeTab !== 'trend' &&
                     activeTab !== 'compare' &&
+                    activeTab !== 'scoutAnalytics' &&
                     activeTab !== 'cards' &&
                     activeTab !== 'table' &&
                     activeTab !== 'summary' &&

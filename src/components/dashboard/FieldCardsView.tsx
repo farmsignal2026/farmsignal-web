@@ -13,6 +13,15 @@ interface FieldCardsViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
   onViewOnMap: (plotCode: string) => void
+  /** Plot codes currently flagged by AI Insights' Weed/Planting Date
+   * suspicion heuristics (aiInsights.ts) — surfaced here too as a small
+   * alert so a user browsing Field Cards directly sees it without having
+   * to visit the AI Insights tab first. Planting Date is a Map (not a
+   * Set) so the alert can show WHICH of the two signatures fired and why
+   * — showing a bare "check planting date" badge for both was confusing,
+   * since they mean very different things. */
+  weedSuspicionCodes: Set<string>
+  plantingSuspicionNotes: Map<string, string>
 }
 
 /** Ports `renderCards()` (RS_Cane_Monitoring_S1.html:4790+) — latest-only
@@ -20,7 +29,7 @@ interface FieldCardsViewProps {
  * with a real NDVI sparkline per card (Phase 3). Clicking a card opens the
  * unified Field Detail popup (NDVI trend, Scout/Follow-up history, Geotag
  * photos, View on Map). */
-export function FieldCardsView({ fields, geoByCode, onViewOnMap }: FieldCardsViewProps) {
+export function FieldCardsView({ fields, geoByCode, onViewOnMap, weedSuspicionCodes, plantingSuspicionNotes }: FieldCardsViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>('plantDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
@@ -90,6 +99,8 @@ export function FieldCardsView({ fields, geoByCode, onViewOnMap }: FieldCardsVie
             field={field}
             geo={geoByCode[field.code]}
             onOpenDetail={() => setDetailField(field)}
+            isWeedSuspicion={weedSuspicionCodes.has(field.code)}
+            plantingSuspicionNote={plantingSuspicionNotes.get(field.code)}
           />
         ))}
       </div>
@@ -124,6 +135,8 @@ export function FieldCardsView({ fields, geoByCode, onViewOnMap }: FieldCardsVie
           geo={geoByCode[detailField.code]}
           onClose={() => setDetailField(null)}
           onViewOnMap={() => onViewOnMap(detailField.code)}
+          isWeedSuspicion={weedSuspicionCodes.has(detailField.code)}
+          plantingSuspicionNote={plantingSuspicionNotes.get(detailField.code)}
         />
       )}
     </div>
@@ -134,10 +147,14 @@ function FieldCard({
   field,
   geo,
   onOpenDetail,
+  isWeedSuspicion,
+  plantingSuspicionNote,
 }: {
   field: Field
   geo: FieldGeo | undefined
   onOpenDetail: () => void
+  isWeedSuspicion: boolean
+  plantingSuspicionNote: string | undefined
 }) {
   const ndviRange =
     geo?.thresholdMin != null && geo?.thresholdMax != null
@@ -172,6 +189,8 @@ function FieldCard({
           {HEALTH_LABEL[field.healthStatus]}
         </span>
       </div>
+
+      <SuspicionAlerts isWeedSuspicion={isWeedSuspicion} plantingSuspicionNote={plantingSuspicionNote} />
 
       <div className="mt-2 space-y-0.5 text-[11px] text-neutral-500">
         <div>
@@ -222,6 +241,40 @@ function FieldCard({
       <div className="mt-2 w-full rounded-md border border-neutral-100 bg-neutral-50 py-1">
         <NdviSparkline field={field} geo={geo} />
       </div>
+    </div>
+  )
+}
+
+/** Surfaces AI Insights' Weed/Planting Date suspicion flags directly on the
+ * card — per user request, so a user browsing Field Cards sees the alert
+ * without a separate trip to the AI Insights tab. Planting Date's badge
+ * carries the specific note as a tooltip (hover/long-press) — the two
+ * underlying signatures (early-germination vs. immature-for-recorded-stage)
+ * mean different things, and a bare badge with no reason caused real
+ * confusion once a user tried to reason backward from just the label. */
+export function SuspicionAlerts({
+  isWeedSuspicion,
+  plantingSuspicionNote,
+}: {
+  isWeedSuspicion: boolean
+  plantingSuspicionNote: string | undefined
+}) {
+  if (!isWeedSuspicion && !plantingSuspicionNote) return null
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {isWeedSuspicion && (
+        <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[9px] font-bold text-teal-700 border border-teal-100">
+          ⚠ Check weed
+        </span>
+      )}
+      {plantingSuspicionNote && (
+        <span
+          title={plantingSuspicionNote}
+          className="rounded-full bg-purple-50 px-2 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-100"
+        >
+          ⚠ Check planting date
+        </span>
+      )}
     </div>
   )
 }

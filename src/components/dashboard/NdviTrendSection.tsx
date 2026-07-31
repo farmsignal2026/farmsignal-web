@@ -1,11 +1,10 @@
 import { useMemo } from 'react'
 import { Line } from 'react-chartjs-2'
 import '../../lib/chartSetup'
-import { classifyHistory } from '../../features/fields/classifyHistory'
+import { classifyHistory, type ClassifiedObservation } from '../../features/fields/classifyHistory'
 import { stageForAge, stages } from '../../features/fields/growthStage'
 import { HEALTH_COLOR_HEX, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
-import { lineStyleLegendLabels } from '../../lib/chartLegend'
 import { buildStageBands, stageBandsPlugin } from '../../lib/stageBandsPlugin'
 
 interface NdviTrendSectionProps {
@@ -13,7 +12,21 @@ interface NdviTrendSectionProps {
   geo: FieldGeo | undefined
 }
 
-const UNCONFIRMED_COLOR = '#d1d5db'
+const S1_COLOR = '#f59e0b'
+const UNCONFIRMED_BORDER = '#9ca3af'
+
+/** A point's marker shape/color — three distinct visual states the source
+ * legend calls out (S1 estimated vs. sharp-drop-unconfirmed were both
+ * flattened into one grey dot before; the underlying `isS1`/
+ * `isLowConfidence` flags were already there on `ClassifiedObservation`,
+ * just never rendered differently). `isS1` takes priority over
+ * `isLowConfidence` since a satellite-source gap-fill point is the more
+ * specific case. */
+function pointStyleFor(p: ClassifiedObservation): { style: 'triangle' | 'circle'; bg: string; border: string; borderWidth: number } {
+  if (p.isS1) return { style: 'triangle', bg: S1_COLOR, border: S1_COLOR, borderWidth: 0 }
+  if (p.isLowConfidence) return { style: 'circle', bg: '#ffffff', border: UNCONFIRMED_BORDER, borderWidth: 1.5 }
+  return { style: 'circle', bg: HEALTH_COLOR_HEX[p.status], border: HEALTH_COLOR_HEX[p.status], borderWidth: 0 }
+}
 
 /** NDVI trend stat row + single-plot chart — the HTML's "Individual plots"
  * chart mode (RS_Cane_Monitoring_S1.html:5400-5495) scoped to one plot,
@@ -88,10 +101,15 @@ export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
       </div>
       {stats.unconfirmed > 0 && (
         <div className="mb-3 text-[10px] text-neutral-400">
-          {stats.unconfirmed} unconfirmed reading{stats.unconfirmed === 1 ? '' : 's'} (cloud/S1 gap-fill) shown in
-          grey, excluded from the counts above.
+          {stats.unconfirmed} reading{stats.unconfirmed === 1 ? '' : 's'} not yet confirmed (S1 gap-fill or a sharp
+          drop awaiting the next pass) — see markers below, excluded from the counts above.
         </div>
       )}
+
+      <ChartLegend />
+      <div className="mb-2 text-[10px] text-neutral-400">
+        Dotted lines = stage threshold range · Point colour/shape = observation status
+      </div>
 
       <div style={{ height: 320 }}>
         <Line
@@ -102,8 +120,17 @@ export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
                 data: points.map((p) => ({ x: p.age, y: Number(p.ndvi.toFixed(3)) })),
                 borderColor: '#1D9E75',
                 backgroundColor: '#1D9E7525',
-                pointBackgroundColor: points.map((p) => (p.isUnconfirmed ? UNCONFIRMED_COLOR : HEALTH_COLOR_HEX[p.status])),
-                pointBorderWidth: 0,
+                pointStyle: points.map((p) => pointStyleFor(p).style),
+                pointBackgroundColor: points.map((p) => pointStyleFor(p).bg),
+                pointBorderColor: points.map((p) => pointStyleFor(p).border),
+                pointBorderWidth: points.map((p) => pointStyleFor(p).borderWidth),
+                // A segment touching an S1/low-confidence point at either
+                // end is drawn dashed rather than solid — the connecting
+                // line itself is only as trustworthy as its shakiest
+                // endpoint, same convention as the source HTML chart.
+                segment: {
+                  borderDash: (ctx) => (points[ctx.p0DataIndex]?.isUnconfirmed || points[ctx.p1DataIndex]?.isUnconfirmed ? [4, 4] : undefined),
+                },
                 tension: 0.3,
                 pointRadius: 4,
                 pointHoverRadius: 6,
@@ -118,10 +145,7 @@ export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-              legend: {
-                position: 'top',
-                labels: { boxWidth: 26, boxHeight: 4, font: { size: 11 }, generateLabels: lineStyleLegendLabels },
-              },
+              legend: { display: false },
               tooltip: {
                 filter: (item) => !String(item.dataset.label).startsWith('_t'),
                 callbacks: {
@@ -143,6 +167,64 @@ export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
         />
       </div>
     </div>
+  )
+}
+
+/** Static top legend, ported from the source HTML's own legend row rather
+ * than Chart.js's dataset-driven one (which only ever had one real line
+ * dataset here, plus hidden `_t_`-prefixed threshold lines — not useful for
+ * explaining what the point colors/shapes mean). Distinguishes S1 gap-fill
+ * points (triangle) from sharp-drop-awaiting-confirmation points (hollow
+ * circle), per user request — both used to render as the same grey dot. */
+function ChartLegend() {
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-neutral-600">
+      <LegendItem shape="square" color={HEALTH_COLOR_HEX.good} label="Good" />
+      <LegendItem shape="square" color={HEALTH_COLOR_HEX.optimal} label="Moderate" />
+      <LegendItem shape="square" color={HEALTH_COLOR_HEX.attention} label="Need attention" />
+      <LegendItem shape="dashed-line" color="#6b7280" label="Stage threshold" />
+      <LegendItem shape="triangle" color={S1_COLOR} label="S1 estimated (cloud gap >7 days)" />
+      <LegendItem shape="circle-hollow" color={UNCONFIRMED_BORDER} label="Unconfirmed (sharp drop, awaiting next pass)" />
+    </div>
+  )
+}
+
+function LegendItem({
+  shape,
+  color,
+  label,
+}: {
+  shape: 'square' | 'triangle' | 'circle-hollow' | 'dashed-line'
+  color: string
+  label: string
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <LegendSwatch shape={shape} color={color} />
+      {label}
+    </div>
+  )
+}
+
+function LegendSwatch({ shape, color }: { shape: 'square' | 'triangle' | 'circle-hollow' | 'dashed-line'; color: string }) {
+  if (shape === 'square') {
+    return <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: color }} />
+  }
+  if (shape === 'dashed-line') {
+    return <span className="inline-block h-0 w-4 shrink-0 border-t-2 border-dashed" style={{ borderColor: color }} />
+  }
+  if (shape === 'circle-hollow') {
+    return (
+      <span
+        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-white"
+        style={{ border: `1.5px solid ${color}` }}
+      />
+    )
+  }
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" className="shrink-0">
+      <polygon points="5,0 10,10 0,10" fill={color} />
+    </svg>
   )
 }
 

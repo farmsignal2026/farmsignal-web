@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useAuth } from '../../features/auth/useAuth'
+import { computePlantingDateSuspicion, computeWeedSuspicion } from '../../features/fields/aiInsights'
 import type { CompareGroupKey } from '../../features/fields/compare'
 import type { StatCardKey } from '../../features/fields/computeFieldStats'
 import { filterFields } from '../../features/fields/filterFields'
 import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
 import { useScoutData } from '../../features/scout/useScoutData'
+import { AiInsightsView } from './AiInsightsView'
 import { CompareView } from './CompareView'
 import { FieldCardsView } from './FieldCardsView'
 import { FieldMapView } from './FieldMapView'
@@ -46,6 +48,28 @@ export function DashboardShell() {
     () => filterFields(sidebarFilteredFields, filters, statFilter, geoByCode),
     [sidebarFilteredFields, filters, statFilter, geoByCode],
   )
+
+  // Field Cards' "check weed"/"check planting date" alerts reuse the exact
+  // same AI Insights heuristics rather than a second copy — a field flagged
+  // here is the same field that would show up in the AI Insights tab's
+  // Fields of Suspicion list. Weed needs scout data loaded (to apply the
+  // "scout already cleared it" override); planting date doesn't.
+  const weedSuspicionCodes = useMemo(() => {
+    if (!scoutQuery.isSuccess) return new Set<string>()
+    return new Set(computeWeedSuspicion(filteredFields, geoByCode, scoutQuery.data).map((w) => w.field.code))
+  }, [filteredFields, geoByCode, scoutQuery.isSuccess, scoutQuery.data])
+  // Map (not just a Set) so the card alert can show WHICH of the two
+  // planting-date signatures fired and why — a field flagged by the
+  // late-immature-for-recorded-stage rule looks nothing like one flagged
+  // by the early-germination rule, and showing just a bare "check planting
+  // date" badge for both was confusing (a user reasoning about the
+  // germination-window rule had no way to tell the flag was actually
+  // coming from the other one).
+  const plantingSuspicionNotes = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const p of computePlantingDateSuspicion(filteredFields, geoByCode)) map.set(p.field.code, p.note)
+    return map
+  }, [filteredFields, geoByCode])
 
   const viewPlotInCards = (plotCode: string) => {
     setFilters({ ...EMPTY_FILTERS, plot: plotCode })
@@ -89,19 +113,27 @@ export function DashboardShell() {
     setActiveTab('cards')
   }
 
-  // Clicking a tab button directly (as opposed to "View on Map") should
-  // always land on the default fit-all view, not a stale focused field
-  // left over from a previous "View on Map" click.
+  // Clicking a tab button directly (as opposed to "View on Map" / "View N
+  // in Field cards") should always land on the default fit-all view, not a
+  // stale focused field or plot-selection left over from a previous jump.
+  // Without this, tapping a Change Detection card in AI Insights (which
+  // sets filters.plots and jumps to Field Cards) left that plot filter
+  // silently applied when the user clicked back to AI Insights directly —
+  // AI Insights kept computing off the narrowed subset with no visible way
+  // to "unselect" it. Only the two jump-only filter fields are cleared
+  // here; a deliberate drill-down filter (e.g. Compare's "view this client
+  // in cards") is left alone since that one's meant to persist across tabs.
   const handleTabSelect = (tab: TabKey) => {
     setMapFocusPlot(null)
+    setFilters((prev) => (prev.plot || prev.plots.length > 0 ? { ...prev, plot: '', plots: [] } : prev))
     setActiveTab(tab)
   }
 
   const brandName = user?.clientCode ?? 'FarmSignal'
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#eef0f3]">
-      <nav className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#eef0f3]">
+      <nav className="flex shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
         <img src="/logonew.jpg" alt="FarmSignal" className="h-10 w-10 shrink-0 object-contain" />
         <div>
           <div className="text-sm font-bold text-neutral-800">{brandName}</div>
@@ -124,19 +156,21 @@ export function DashboardShell() {
       </nav>
 
       <div
-        className="grid flex-1"
+        className="grid min-h-0 flex-1"
         style={{
           gridTemplateColumns: `${sidebarCollapsed ? 0 : 256}px 16px 1fr`,
           transition: 'grid-template-columns 300ms ease-in-out',
         }}
       >
-        <div className="overflow-hidden">
-          <Sidebar
-            fields={scopedFields}
-            filters={filters}
-            onChange={setFilters}
-            onOverviewClick={() => setActiveTab('trend')}
-          />
+        <div className="h-full overflow-hidden">
+          <div className="h-full w-64 overflow-y-auto">
+            <Sidebar
+              fields={scopedFields}
+              filters={filters}
+              onChange={setFilters}
+              onOverviewClick={() => setActiveTab('trend')}
+            />
+          </div>
         </div>
 
         <button
@@ -148,7 +182,7 @@ export function DashboardShell() {
           {sidebarCollapsed ? '›' : '‹'}
         </button>
 
-        <main className="min-w-0 space-y-4 p-4">
+        <main className="h-full min-w-0 space-y-4 overflow-y-auto p-4">
           {fieldsQuery.isLoading && (
             <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-400">
               Loading field data…
@@ -190,7 +224,13 @@ export function DashboardShell() {
                       </div>
                     ))}
                   {activeTab === 'cards' && (
-                    <FieldCardsView fields={filteredFields} geoByCode={geoByCode} onViewOnMap={viewPlotOnMap} />
+                    <FieldCardsView
+                      fields={filteredFields}
+                      geoByCode={geoByCode}
+                      onViewOnMap={viewPlotOnMap}
+                      weedSuspicionCodes={weedSuspicionCodes}
+                      plantingSuspicionNotes={plantingSuspicionNotes}
+                    />
                   )}
                   {activeTab === 'table' && <FieldTableView fields={filteredFields} geoByCode={geoByCode} />}
                   {activeTab === 'summary' && (
@@ -207,6 +247,19 @@ export function DashboardShell() {
                   {activeTab === 'map' && (
                     <FieldMapView fields={filteredFields} geoByCode={geoByCode} focusPlotCode={mapFocusPlot} />
                   )}
+                  {activeTab === 'insights' &&
+                    (scoutQuery.isSuccess ? (
+                      <AiInsightsView
+                        fields={filteredFields}
+                        geoByCode={geoByCode}
+                        scoutData={scoutQuery.data}
+                        onViewPlotsInCards={viewPlotsInCards}
+                      />
+                    ) : (
+                      <div className="p-10 text-center text-sm text-neutral-400">
+                        {scoutQuery.isLoading ? 'Loading scout data…' : 'Failed to load scout data.'}
+                      </div>
+                    ))}
                   {activeTab !== 'trend' &&
                     activeTab !== 'compare' &&
                     activeTab !== 'scoutAnalytics' &&
@@ -214,7 +267,8 @@ export function DashboardShell() {
                     activeTab !== 'table' &&
                     activeTab !== 'summary' &&
                     activeTab !== 'chart' &&
-                    activeTab !== 'map' && <TabPanel tab={activeTab} />}
+                    activeTab !== 'map' &&
+                    activeTab !== 'insights' && <TabPanel tab={activeTab} />}
                 </div>
               </div>
             </>

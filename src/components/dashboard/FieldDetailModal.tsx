@@ -4,6 +4,7 @@ import type { Field, FieldGeo } from '../../features/fields/types'
 import { usePhotos } from '../../features/photos/usePhotos'
 import { useScoutData } from '../../features/scout/useScoutData'
 import { recommendationGiven, type ScoutFollowup, type ScoutReport } from '../../features/scout/types'
+import { SuspicionAlerts } from './FieldCardsView'
 import { NdviTrendSection } from './NdviTrendSection'
 import { PhotoGrid } from './PhotoGrid'
 import { ScoutChecklistView, scoutReportRemarksLines } from './ScoutChecklistView'
@@ -13,6 +14,8 @@ interface FieldDetailModalProps {
   geo: FieldGeo | undefined
   onClose: () => void
   onViewOnMap: () => void
+  isWeedSuspicion?: boolean
+  plantingSuspicionNote?: string
 }
 
 function formatDate(d: Date): string {
@@ -24,7 +27,14 @@ function formatDate(d: Date): string {
  * NDVI-only trend popup. Stacked sections (matching FieldMapDetailPanel's
  * pattern), not tabs. Read-only — views records the mobile app already
  * created; see the plan's read-only scope decision. */
-export function FieldDetailModal({ field, geo, onClose, onViewOnMap }: FieldDetailModalProps) {
+export function FieldDetailModal({
+  field,
+  geo,
+  onClose,
+  onViewOnMap,
+  isWeedSuspicion = false,
+  plantingSuspicionNote,
+}: FieldDetailModalProps) {
   const scoutQuery = useScoutData()
   const photosQuery = usePhotos(field.code, 'geotag')
 
@@ -42,22 +52,26 @@ export function FieldDetailModal({ field, geo, onClose, onViewOnMap }: FieldDeta
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-2 border-b border-neutral-100 bg-white p-4">
-          <div>
-            <div className="text-sm font-bold text-neutral-800">{field.name}</div>
-            <div className="text-xs text-neutral-400">
-              {field.code}
-              {field.village ? ` · ${field.village}` : ''}
+        <div className="sticky top-0 z-10 border-b border-neutral-100 bg-white p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-bold text-neutral-800">{field.name}</div>
+              <div className="text-xs text-neutral-400">
+                {field.code}
+                {field.village ? ` · ${field.village}` : ''}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${HEALTH_BADGE_CLASS[field.healthStatus]}`}>
+                {HEALTH_LABEL[field.healthStatus]}
+              </span>
+              <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+                ✕
+              </button>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${HEALTH_BADGE_CLASS[field.healthStatus]}`}>
-              {HEALTH_LABEL[field.healthStatus]}
-            </span>
-            <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
-              ✕
-            </button>
-          </div>
+          <SuspicionAlerts isWeedSuspicion={isWeedSuspicion} plantingSuspicionNote={plantingSuspicionNote} />
+          {plantingSuspicionNote && <div className="mt-1 text-[11px] text-purple-700">{plantingSuspicionNote}</div>}
         </div>
 
         <div className="space-y-5 p-4">

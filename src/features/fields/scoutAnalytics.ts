@@ -25,7 +25,10 @@ function sortGroupsByTotal(names: string[], totalFor: (name: string) => number):
   return [...names].sort((a, b) => totalFor(a) - totalFor(b))
 }
 
-function latestReport(scoutData: ScoutData, plotCode: string) {
+/** Exported so aiInsights.ts's Scout Recommendation can reuse the same
+ * "which report counts as this plot's latest" lookup instead of a second
+ * copy. */
+export function latestReport(scoutData: ScoutData, plotCode: string) {
   const reports = scoutData.reportsByPlot[plotCode]
   return reports && reports.length > 0 ? reports[0] : null
 }
@@ -105,11 +108,14 @@ export const SCOUT_REASON_COLOR: Record<string, string> = {
   Others: '#C293BA',
 }
 
-interface ChecklistEntry {
+export interface ChecklistEntry {
   status?: string
 }
 
-function isFlagged(entry: ChecklistEntry | undefined): boolean {
+/** Exported so aiInsights.ts's Scout Recommendation can reuse the exact
+ * same Moderate/Severe/Very Severe flag definition Scout Reasons uses,
+ * rather than a second copy that could drift. */
+export function isFlagged(entry: ChecklistEntry | undefined): boolean {
   return entry?.status === 'Moderate' || entry?.status === 'Severe' || entry?.status === 'Very Severe'
 }
 

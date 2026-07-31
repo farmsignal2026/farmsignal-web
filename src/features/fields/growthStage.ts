@@ -67,6 +67,21 @@ export function statusForNdvi(ndvi: number, stage: GrowthStage): 'good' | 'optim
   return 'attention'
 }
 
+/** Ports source's per-plot Farmer Performance Score
+ * (RS_Cane_Monitoring_S1.html:5168-5300): a single reading's NDVI as a
+ * percentage of its stage's optimal midpoint, capped at 100 so a reading
+ * far above the stage max can't blow the score past "perfect". Distinct
+ * from Compare's Stage Matrix score (`compare.ts`), which averages many
+ * observations *within* a stage and caps each stage's contribution at that
+ * stage's own max-to-midpoint ratio (can exceed 100) rather than a flat
+ * 100 — different purpose (aggregate stage comparison vs. one plot's
+ * headline score), not a shared formula despite the visual similarity. */
+export function scoreForNdvi(ndvi: number, stage: GrowthStage): number {
+  const mid = (stage.tMin + stage.tMax) / 2
+  if (!mid) return 0
+  return Math.min(100, Math.round((ndvi / mid) * 100))
+}
+
 export interface NdviObservation {
   date: Date
   ndvi: number

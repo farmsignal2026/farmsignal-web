@@ -1,0 +1,144 @@
+import { useState } from 'react'
+import {
+  buildDetailReport,
+  buildScoutStatusReport,
+  buildScoutVisitImpactReport,
+  buildSuspicionReport,
+  buildSummaryReport,
+} from '../../features/fields/exports'
+import type { Field, FieldGeo } from '../../features/fields/types'
+import { downloadXLSX } from '../../lib/exportUtils'
+import type { Officer } from '../../features/officers/types'
+import type { ScoutData } from '../../features/scout/types'
+
+interface ExportModalProps {
+  fields: Field[]
+  geoByCode: Record<string, FieldGeo>
+  scoutData: ScoutData | undefined
+  officers: Officer[]
+  onClose: () => void
+}
+
+interface ReportDef {
+  key: string
+  label: string
+  description: string
+  needsScout: boolean
+  build: () => Record<string, unknown>[]
+  filenamePrefix: string
+  sheetName: string
+}
+
+/** Ports source's 6-report "⬇ Export Table CSV" sidebar section
+ * (RS_Cane_Monitoring_S1.html:689-702), condensed to 5 per user direction
+ * (#3 became a combined Weed+Planting-Date suspicion report reusing the
+ * exact AI Insights heuristics; #5/#6 merged into one row-per-visit
+ * report instead of two separate files) and switched from plain CSV to
+ * real .xlsx via SheetJS so every numeric column stays a real number,
+ * not quoted text — pivots straight into Excel without reformatting. */
+export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }: ExportModalProps) {
+  const [downloading, setDownloading] = useState<string | null>(null)
+
+  const reports: ReportDef[] = [
+    {
+      key: 'detail',
+      label: 'NDVI Trend data',
+      description: 'One row per confirmed satellite observation for every plot currently in view.',
+      needsScout: false,
+      build: () => buildDetailReport(fields, geoByCode),
+      filenamePrefix: 'ndvi_trend_data',
+      sheetName: 'NDVI Trend Data',
+    },
+    {
+      key: 'summary',
+      label: 'Current Health status',
+      description: 'One row per plot — current status plus season min/max/avg NDVI and observation counts.',
+      needsScout: false,
+      build: () => buildSummaryReport(fields, geoByCode),
+      filenamePrefix: 'current_health_status',
+      sheetName: 'Current Health Status',
+    },
+    {
+      key: 'suspicion',
+      label: 'Suspicion report',
+      description: 'Weed + Planting Date suspicion, combined — same heuristics as the AI Insights tab.',
+      needsScout: true,
+      build: () => buildSuspicionReport(fields, geoByCode, scoutData!),
+      filenamePrefix: 'suspicion_report',
+      sheetName: 'Suspicion',
+    },
+    {
+      key: 'scoutStatus',
+      label: 'Division scout status',
+      description: 'One row per plot — scout status, assigned officer, last visit date.',
+      needsScout: true,
+      build: () => buildScoutStatusReport(fields, scoutData!, officers),
+      filenamePrefix: 'division_scout_status',
+      sheetName: 'Scout Status',
+    },
+    {
+      key: 'visitImpact',
+      label: 'Scout Visit & Impact',
+      description: 'One row per scout visit — flagged issues, crop status at the time, and follow-up outcome.',
+      needsScout: true,
+      build: () => buildScoutVisitImpactReport(fields, geoByCode, scoutData!, officers),
+      filenamePrefix: 'scout_visit_impact',
+      sheetName: 'Scout Visit Impact',
+    },
+  ]
+
+  async function handleDownload(report: ReportDef) {
+    setDownloading(report.key)
+    try {
+      const rows = report.build()
+      if (rows.length === 0) {
+        window.alert('No data to export for the current filter set.')
+        return
+      }
+      downloadXLSX(report.filenamePrefix, report.sheetName, rows)
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-neutral-100 p-4">
+          <div>
+            <div className="text-sm font-bold text-neutral-800">Export Reports</div>
+            <div className="text-[11px] text-neutral-400">Reflects the fields currently in view (sidebar + stat-card filters).</div>
+          </div>
+          <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-2 p-4">
+          {reports.map((r) => {
+            const disabled = r.needsScout && !scoutData
+            return (
+              <button
+                key={r.key}
+                type="button"
+                disabled={disabled || downloading !== null}
+                onClick={() => handleDownload(r)}
+                className="flex w-full items-start justify-between gap-3 rounded-md border border-neutral-200 p-3 text-left hover:border-green-300 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-neutral-200 disabled:hover:bg-white"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-neutral-700">{r.label}</div>
+                  <div className="mt-0.5 text-[11px] text-neutral-400">
+                    {disabled ? 'Scout data still loading…' : r.description}
+                  </div>
+                </div>
+                <span className="shrink-0 text-xs font-semibold text-green-700">
+                  {downloading === r.key ? 'Exporting…' : '⬇ .xlsx'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import type { Chart as ChartInstance } from 'chart.js'
+import { useMemo, useRef, useState } from 'react'
 import { Line } from 'react-chartjs-2'
 import '../../lib/chartSetup'
 import { classifyHistory } from '../../features/fields/classifyHistory'
@@ -6,7 +7,9 @@ import { stageForAge, stages } from '../../features/fields/growthStage'
 import { AGE_BUCKET_DAYS, orderPlotTypes, plotTypeColor } from '../../features/fields/plotTypeStyle'
 import { seasonLabelForYear, seasonStartYearFor } from '../../features/fields/season'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { downloadChartExcel, downloadChartPNG, printChartAsPDF } from '../../lib/exportUtils'
 import { buildStageBands, stageBandsPlugin } from '../../lib/stageBandsPlugin'
+import { ExportButtonRow } from './ExportButtonRow'
 
 interface NdviTrendViewProps {
   fields: Field[]
@@ -33,6 +36,7 @@ function seasonColor(index: number): string {
  * line per individual plot — unreadable clutter at 400+ fields. */
 export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
+  const chartRef = useRef<ChartInstance<'line'> | null>(null)
   const seasonModeEnabled = seasons.length >= 2
   const [groupBy, setGroupBy] = useState<GroupBy>('plotType')
   const bySeason = groupBy === 'season' && seasonModeEnabled
@@ -173,6 +177,14 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
         </div>
       </div>
 
+      <div className="mb-3 flex justify-end">
+        <ExportButtonRow
+          onPNG={() => downloadChartPNG(chartRef.current, 'NDVI_trend')}
+          onPDF={() => printChartAsPDF(chartRef.current, 'NDVI Trend')}
+          onExcel={() => downloadChartExcel(chartRef.current, 'NDVI_trend')}
+        />
+      </div>
+
       <div className="mb-4 flex flex-wrap gap-4">
         {legend.map((l) => {
           const isHidden = hiddenKeys.has(l.key)
@@ -195,6 +207,7 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
 
       <div style={{ height: 400 }}>
         <Line
+          ref={chartRef}
           data={{ datasets: [...datasets, ...thresholdDatasets] }}
           plugins={[stageBandsPlugin]}
           options={{

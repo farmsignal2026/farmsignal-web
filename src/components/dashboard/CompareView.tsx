@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import type { Chart as ChartInstance } from 'chart.js'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Bar } from 'react-chartjs-2'
 import { HEALTH_COLOR_HEX, WATCH_COLOR_HEX } from '../../features/fields/badgeStyles'
 import {
@@ -12,6 +13,8 @@ import { seasonLabelForYear } from '../../features/fields/season'
 import type { Field, FieldGeo } from '../../features/fields/types'
 import '../../lib/chartSetup'
 import { lineStyleLegendLabels } from '../../lib/chartLegend'
+import { downloadChartExcel, downloadChartPNG, downloadXLSX, printChartAsPDF, printTableAsPDF } from '../../lib/exportUtils'
+import { ExportButtonRow } from './ExportButtonRow'
 
 interface CompareViewProps {
   fields: Field[]
@@ -41,6 +44,27 @@ function defaultStart(fields: Field[]): string {
 
 const SEASON_ALPHA = ['FF', '99', '55', '33']
 
+/** Ports `compareExportExcel()`'s Stage Matrix branch (:6819-6838) —
+ * one row per group: Score + each stage's observation count and average
+ * NDVI, in the group's currently-sorted order. */
+function buildStageMatrixRows(
+  matrix: ReturnType<typeof computeCompareStageMatrix>,
+  groupNames: string[],
+  groupLabel: string,
+): Record<string, unknown>[] {
+  return groupNames.map((g) => {
+    const row: Record<string, unknown> = { [groupLabel]: g }
+    const score = matrix.scores[g]
+    row['Score'] = score == null ? '' : Math.round(score)
+    for (const stageName of matrix.stageNames) {
+      const cell = matrix.cells[g]?.[stageName]
+      row[`${stageName} (obs)`] = cell ? cell.total : 0
+      row[`${stageName} (avg NDVI)`] = cell && cell.total ? Number((cell.ndviSum / cell.total).toFixed(3)) : ''
+    }
+    return row
+  })
+}
+
 /** Compare tab — 6 group-by dimensions x 4 view modes (Count / % / Stage
  * Matrix / Plant Season YoY). Ports `renderCompare()`
  * (RS_Cane_Monitoring_S1.html:7462-7663) and `renderCompareStageMatrix()`
@@ -54,6 +78,8 @@ export function CompareView({ fields, geoByCode, seasons, onViewGroupInCards }: 
   const [groupKey, setGroupKey] = useState<CompareGroupKey>('division')
   const [viewAs, setViewAs] = useState<ViewAs>('count')
   const [matrixSortDir, setMatrixSortDir] = useState<'asc' | 'desc'>('desc')
+  const chartRef = useRef<ChartInstance<'bar'> | null>(null)
+  const matrixTableRef = useRef<HTMLTableElement>(null)
 
   const yoyEnabled = seasons.length >= 2
 
@@ -162,19 +188,45 @@ export function CompareView({ fields, geoByCode, seasons, onViewGroupInCards }: 
         </div>
       </div>
 
-      <div className="mb-1 text-sm font-semibold text-neutral-700">
-        Compare by {COMPARE_GROUP_LABEL[groupKey]}
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-neutral-700">Compare by {COMPARE_GROUP_LABEL[groupKey]}</div>
+          <div className="text-xs text-neutral-400">
+            {viewAs === 'matrix'
+              ? 'Per-stage health composition and score, tallied across every reading in the period'
+              : viewAs === 'yoy'
+                ? `Good / Moderate / Need Attention / Watch %, latest reading in period, by ${[...seasons]
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((y) => seasonLabelForYear(Number(y)))
+                    .join(' vs ')}`
+                : 'Good / Moderate / Need Attention / Watch, latest reading in the selected period'}
+          </div>
+        </div>
+        {rangeValid &&
+          ((viewAs === 'matrix' && matrix && matrix.groupNames.length > 0) ||
+            (viewAs === 'yoy' && yoy && yoy.groupNames.length > 0) ||
+            ((viewAs === 'count' || viewAs === 'pct') && counts && counts.groupNames.length > 0)) && (
+            <ExportButtonRow
+              showPNG={viewAs !== 'matrix'}
+              onPNG={() => downloadChartPNG(chartRef.current, 'Compare_chart')}
+              onPDF={() =>
+                viewAs === 'matrix'
+                  ? printTableAsPDF('Crop health comparison — Stage Matrix', matrixTableRef.current)
+                  : printChartAsPDF(chartRef.current, 'Crop health comparison')
+              }
+              onExcel={() =>
+                viewAs === 'matrix' && matrix
+                  ? downloadXLSX(
+                      'Stage_Matrix',
+                      'Stage Matrix',
+                      buildStageMatrixRows(matrix, sortedMatrixGroups.map((g) => g.name), COMPARE_GROUP_LABEL[groupKey]),
+                    )
+                  : downloadChartExcel(chartRef.current, 'Compare_chart')
+              }
+            />
+          )}
       </div>
-      <div className="mb-3 text-xs text-neutral-400">
-        {viewAs === 'matrix'
-          ? 'Per-stage health composition and score, tallied across every reading in the period'
-          : viewAs === 'yoy'
-            ? `Good / Moderate / Need Attention / Watch %, latest reading in period, by ${[...seasons]
-                .sort((a, b) => Number(a) - Number(b))
-                .map((y) => seasonLabelForYear(Number(y)))
-                .join(' vs ')}`
-            : 'Good / Moderate / Need Attention / Watch, latest reading in the selected period'}
-      </div>
+      <div className="mb-3" />
 
       {!rangeValid ? (
         <div className="p-10 text-center text-sm text-neutral-400">Start date must be before End date.</div>
@@ -189,6 +241,7 @@ export function CompareView({ fields, geoByCode, seasons, onViewGroupInCards }: 
           </div>
         ) : (
           <StageMatrixTable
+            tableRef={matrixTableRef}
             matrix={matrix}
             sortedGroups={sortedMatrixGroups}
             sortDir={matrixSortDir}
@@ -207,25 +260,27 @@ export function CompareView({ fields, geoByCode, seasons, onViewGroupInCards }: 
             No fields with NDVI data in the selected seasons for the current filter.
           </div>
         ) : (
-          <YoYChart yoy={yoy} groupKey={groupKey} onViewGroupInCards={onViewGroupInCards} />
+          <YoYChart chartRef={chartRef} yoy={yoy} groupKey={groupKey} onViewGroupInCards={onViewGroupInCards} />
         )
       ) : !counts || counts.groupNames.length === 0 ? (
         <div className="p-10 text-center text-sm text-neutral-400">
           No observations found in this date range for the current filter.
         </div>
       ) : (
-        <CountChart counts={counts} isPct={viewAs === 'pct'} groupKey={groupKey} onViewGroupInCards={onViewGroupInCards} />
+        <CountChart chartRef={chartRef} counts={counts} isPct={viewAs === 'pct'} groupKey={groupKey} onViewGroupInCards={onViewGroupInCards} />
       )}
     </div>
   )
 }
 
 function CountChart({
+  chartRef,
   counts,
   isPct,
   groupKey,
   onViewGroupInCards,
 }: {
+  chartRef: RefObject<ChartInstance<'bar'> | null>
   counts: ReturnType<typeof computeCompareCounts>
   isPct: boolean
   groupKey: CompareGroupKey
@@ -243,6 +298,7 @@ function CountChart({
   return (
     <div style={{ height: 420 }}>
       <Bar
+        ref={chartRef}
         data={{
           labels: groupNames,
           datasets: [
@@ -285,10 +341,12 @@ function CountChart({
 }
 
 function YoYChart({
+  chartRef,
   yoy,
   groupKey,
   onViewGroupInCards,
 }: {
+  chartRef: RefObject<ChartInstance<'bar'> | null>
   yoy: ReturnType<typeof computeCompareYoY>
   groupKey: CompareGroupKey
   onViewGroupInCards: (groupKey: CompareGroupKey, groupValue: string) => void
@@ -334,6 +392,7 @@ function YoYChart({
   return (
     <div style={{ height: 440 }}>
       <Bar
+        ref={chartRef}
         data={{ labels: groupNames, datasets }}
         options={{
           responsive: true,
@@ -366,6 +425,7 @@ function YoYChart({
 }
 
 function StageMatrixTable({
+  tableRef,
   matrix,
   sortedGroups,
   sortDir,
@@ -373,6 +433,7 @@ function StageMatrixTable({
   groupKey,
   onViewGroupInCards,
 }: {
+  tableRef: RefObject<HTMLTableElement | null>
   matrix: ReturnType<typeof computeCompareStageMatrix>
   sortedGroups: { name: string; score: number | null }[]
   sortDir: 'asc' | 'desc'
@@ -389,7 +450,7 @@ function StageMatrixTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse text-xs">
+      <table ref={tableRef} className="w-full min-w-[720px] border-collapse text-xs">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-neutral-500">
             <th className="px-2 py-2 font-medium">{COMPARE_GROUP_LABEL[groupKey]}</th>

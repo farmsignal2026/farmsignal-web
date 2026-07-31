@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import type { Chart as ChartInstance } from 'chart.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, Line } from 'react-chartjs-2'
 import '../../lib/chartSetup'
 import { computeHealthTrend, computeHealthTrendYoY, type TrendTrack } from '../../features/fields/healthTrend'
 import { seasonLabelForYear } from '../../features/fields/season'
 import type { Field, FieldGeo } from '../../features/fields/types'
 import { lineStyleLegendLabels } from '../../lib/chartLegend'
+import { downloadChartExcel, downloadChartPNG, printChartAsPDF } from '../../lib/exportUtils'
+import { ExportButtonRow } from './ExportButtonRow'
 
 interface HealthTrendViewProps {
   fields: Field[]
@@ -45,6 +48,8 @@ export function HealthTrendView({ fields, geoByCode, seasons }: HealthTrendViewP
   const [end, setEnd] = useState(isoDate(new Date()))
   const [track, setTrack] = useState<TrendTrack>('health')
   const [viewAs, setViewAs] = useState<ViewAs>('count')
+  const barChartRef = useRef<ChartInstance<'bar'> | null>(null)
+  const lineChartRef = useRef<ChartInstance<'line'> | null>(null)
 
   const yoyEnabled = seasons.length >= 2
   const isYoY = viewAs === 'yoy' && yoyEnabled && track === 'health'
@@ -146,19 +151,33 @@ export function HealthTrendView({ fields, geoByCode, seasons }: HealthTrendViewP
         </div>
       </div>
 
-      <div className="mb-1 text-sm font-semibold text-neutral-700">
-        {isYoY ? 'Crop Health Trend — YoY Comparison' : track === 'health' ? 'Crop Health Trend' : 'Crop Stage Trend'}
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-neutral-700">
+            {isYoY ? 'Crop Health Trend — YoY Comparison' : track === 'health' ? 'Crop Health Trend' : 'Crop Stage Trend'}
+          </div>
+          <div className="text-xs text-neutral-400">
+            {isYoY
+              ? `Good / Moderate / Need Attention by Days After Planting, ${[...seasons]
+                  .sort((a, b) => Number(a) - Number(b))
+                  .map((y) => seasonLabelForYear(Number(y)))
+                  .join(' vs ')} — aligned by crop age, not calendar date`
+              : track === 'health'
+                ? 'No. of fields in Good / Moderate / Need Attention over fortnightly snapshots'
+                : 'No. of fields in each growth stage over fortnightly snapshots'}
+          </div>
+        </div>
+        {(isYoY ? yoySeries && yoySeries.some((s) => s.points.length > 0) : result && result.labels.length > 0) && (
+          <ExportButtonRow
+            onPNG={() => downloadChartPNG(barChartRef.current ?? lineChartRef.current, 'Health_trend')}
+            onPDF={() =>
+              printChartAsPDF(barChartRef.current ?? lineChartRef.current, isYoY ? 'Crop Health Trend — YoY' : 'Crop Health Trend')
+            }
+            onExcel={() => downloadChartExcel(barChartRef.current ?? lineChartRef.current, isYoY ? 'Health_trend_yoy' : 'Health_trend')}
+          />
+        )}
       </div>
-      <div className="mb-3 text-xs text-neutral-400">
-        {isYoY
-          ? `Good / Moderate / Need Attention by Days After Planting, ${[...seasons]
-              .sort((a, b) => Number(a) - Number(b))
-              .map((y) => seasonLabelForYear(Number(y)))
-              .join(' vs ')} — aligned by crop age, not calendar date`
-          : track === 'health'
-            ? 'No. of fields in Good / Moderate / Need Attention over fortnightly snapshots'
-            : 'No. of fields in each growth stage over fortnightly snapshots'}
-      </div>
+      <div className="mb-3" />
 
       {isYoY ? (
         !yoySeries || yoySeries.every((s) => s.points.length === 0) ? (
@@ -168,6 +187,7 @@ export function HealthTrendView({ fields, geoByCode, seasons }: HealthTrendViewP
         ) : (
           <div style={{ height: 400 }}>
             <Line
+              ref={lineChartRef}
               data={{
                 datasets: yoySeries.map((s) => ({
                   label: s.label,
@@ -211,6 +231,7 @@ export function HealthTrendView({ fields, geoByCode, seasons }: HealthTrendViewP
         <div style={{ height: 400 }}>
           {isPct ? (
             <Bar
+              ref={barChartRef}
               data={{
                 labels: result.labels,
                 datasets: result.series.map((s) => ({
@@ -238,6 +259,7 @@ export function HealthTrendView({ fields, geoByCode, seasons }: HealthTrendViewP
             />
           ) : (
             <Line
+              ref={lineChartRef}
               data={{
                 labels: result.labels,
                 datasets: result.series.map((s) => ({

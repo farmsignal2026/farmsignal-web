@@ -19,7 +19,7 @@ export class ScoutRepository {
     const { data: reportRows, error: reportErr } = await this.client
       .from('scout_reports')
       .select(
-        'id,plot_no,visit_date,follow_up_required,follow_up_date,stress_type,stress_severity,checklist,notes,photo_urls,action_required',
+        'id,plot_no,visit_date,follow_up_required,follow_up_date,stress_type,stress_severity,checklist,notes,photo_urls,action_required,officer_id',
       )
       .order('visit_date', { ascending: false })
     if (reportErr) throw reportErr
@@ -39,6 +39,7 @@ export class ScoutRepository {
         notes: (r.notes as string | null) ?? null,
         photoUrls: (r.photo_urls as string[] | null) ?? [],
         actionRequired: (r.action_required as string[] | null) ?? [],
+        officerId: (r.officer_id as string | null) ?? null,
       }
       ;(reportsByPlot[report.plotNo] ??= []).push(report)
     }

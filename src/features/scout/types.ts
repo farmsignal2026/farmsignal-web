@@ -14,6 +14,9 @@ export interface ScoutReport {
   photoUrls: string[]
   /** Currently only ever ['Recommendation given'] or []. */
   actionRequired: string[]
+  /** `farm_officers.id` of who made this visit — added for the Scout
+   * Visit & Impact export (Phase 7), not previously needed by any view. */
+  officerId: string | null
 }
 
 export function recommendationGiven(report: ScoutReport): boolean {

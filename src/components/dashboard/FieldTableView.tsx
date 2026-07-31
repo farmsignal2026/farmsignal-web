@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { HEALTH_BADGE_CLASS, HEALTH_LABEL, stageBadgeClass } from '../../features/fields/badgeStyles'
+import { buildTableExportReport } from '../../features/fields/exports'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { downloadXLSX } from '../../lib/exportUtils'
 
 interface FieldTableViewProps {
   fields: Field[]
@@ -58,7 +60,17 @@ export function FieldTableView({ fields, geoByCode }: FieldTableViewProps) {
   const sortArrow = (key: SortKey) => (sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '')
 
   return (
-    <div className="overflow-x-auto p-4">
+    <div className="p-4">
+      <div className="mb-3 flex justify-end">
+        <button
+          type="button"
+          onClick={() => downloadXLSX('field_table', 'Field Table', buildTableExportReport(sorted, geoByCode))}
+          className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] font-medium text-neutral-600 hover:bg-neutral-50"
+        >
+          ⬇ Excel
+        </button>
+      </div>
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[900px] border-collapse text-xs">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-[10px] uppercase tracking-wide text-neutral-400">
@@ -119,6 +131,7 @@ export function FieldTableView({ fields, geoByCode }: FieldTableViewProps) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

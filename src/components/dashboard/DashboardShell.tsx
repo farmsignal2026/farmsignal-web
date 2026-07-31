@@ -5,10 +5,12 @@ import type { CompareGroupKey } from '../../features/fields/compare'
 import type { StatCardKey } from '../../features/fields/computeFieldStats'
 import { filterFields } from '../../features/fields/filterFields'
 import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
+import { useOfficers } from '../../features/officers/useOfficers'
 import { useScoutData } from '../../features/scout/useScoutData'
 import { AiInsightsView } from './AiInsightsView'
 import { AssignScoutModal } from './AssignScoutModal'
 import { CompareView } from './CompareView'
+import { ExportModal } from './ExportModal'
 import { FieldCardsView } from './FieldCardsView'
 import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
@@ -29,6 +31,7 @@ export function DashboardShell() {
   const scopedFields = useScopedFields()
   const geoByCode = useGeoByCode()
   const scoutQuery = useScoutData()
+  const officersQuery = useOfficers()
 
   const [filters, setFilters] = useState<SidebarFilters>(EMPTY_FILTERS)
   const [activeTab, setActiveTab] = useState<TabKey>('trend')
@@ -39,6 +42,7 @@ export function DashboardShell() {
   const [scoutSelected, setScoutSelected] = useState<Set<string>>(new Set())
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [manageAssignmentsOpen, setManageAssignmentsOpen] = useState(false)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
 
   // Sidebar-filtered only (no stat-card category applied) — the stat row
   // itself always reflects this, matching renderStats(filteredRows) in the
@@ -164,7 +168,7 @@ export function DashboardShell() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#eef0f3]">
-      <nav className="flex shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
+      <nav className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-neutral-200 bg-white px-4 py-3">
         <img src="/logonew.jpg" alt="FarmSignal" className="h-10 w-10 shrink-0 object-contain" />
         <div>
           <div className="text-sm font-bold text-neutral-800">{brandName}</div>
@@ -188,6 +192,14 @@ export function DashboardShell() {
           title="View and cancel currently open scout assignments"
         >
           📋 Assignments
+        </button>
+        <button
+          type="button"
+          onClick={() => setExportModalOpen(true)}
+          className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+          title="Export reports for the fields currently in view"
+        >
+          ⬇ Export
         </button>
         <div className="text-right text-xs">
           <div className="font-semibold text-neutral-700">{user?.name}</div>
@@ -341,6 +353,16 @@ export function DashboardShell() {
 
       {manageAssignmentsOpen && (
         <ManageAssignmentsModal fields={scopedFields} onClose={() => setManageAssignmentsOpen(false)} />
+      )}
+
+      {exportModalOpen && (
+        <ExportModal
+          fields={filteredFields}
+          geoByCode={geoByCode}
+          scoutData={scoutQuery.data}
+          officers={officersQuery.data ?? []}
+          onClose={() => setExportModalOpen(false)}
+        />
       )}
     </div>
   )

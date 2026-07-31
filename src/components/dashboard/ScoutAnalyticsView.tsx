@@ -1,5 +1,8 @@
-import { useMemo, useState } from 'react'
+import type { Chart as ChartInstance } from 'chart.js'
+import { useMemo, useRef, useState, type RefObject } from 'react'
 import { Bar } from 'react-chartjs-2'
+import { downloadChartExcel, downloadChartPNG, printChartAsPDF } from '../../lib/exportUtils'
+import { ExportButtonRow } from './ExportButtonRow'
 import {
   SCOUT_GROUP_LABEL,
   SCOUT_OUTCOME_COLOR,
@@ -52,13 +55,13 @@ const VIEW_LABEL: Record<ScoutView, string> = {
  * the current filter — a static, simpler alternative to source's dynamic
  * "click a legend item to re-sort by visible categories" interaction
  * (`saResortChartByVisible`), which stays out of scope. Export buttons
- * (Excel/PDF/PNG) stay out of scope too, same Phase 7 / polish-later
- * convention as every other tab in this port. */
+ * (Excel/PDF/PNG) ported in Phase 7 — see `exportUtils.ts`. */
 export function ScoutAnalyticsView({ fields, geoByCode, scoutData }: ScoutAnalyticsViewProps) {
   const [groupKey, setGroupKey] = useState<ScoutGroupKey>('division')
   const [view, setView] = useState<ScoutView>('status')
   const [metric, setMetric] = useState<ScoutMetric>('count')
   const [top3Only, setTop3Only] = useState(false)
+  const chartRef = useRef<ChartInstance<'bar'> | null>(null)
 
   const result = useMemo<GroupedResult>(() => {
     switch (view) {
@@ -170,27 +173,41 @@ export function ScoutAnalyticsView({ fields, geoByCode, scoutData }: ScoutAnalyt
         )}
       </div>
 
-      <div className="mb-1 text-sm font-semibold text-neutral-700">{title}</div>
-      <div className="mb-3 text-xs text-neutral-400">{subtitle}</div>
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-neutral-700">{title}</div>
+          <div className="text-xs text-neutral-400">{subtitle}</div>
+        </div>
+        {result.groupNames.length > 0 && (
+          <ExportButtonRow
+            onPNG={() => downloadChartPNG(chartRef.current, `Scout_Analytics_${view}`)}
+            onPDF={() => printChartAsPDF(chartRef.current, title)}
+            onExcel={() => downloadChartExcel(chartRef.current, `Scout_Analytics_${view}`)}
+          />
+        )}
+      </div>
+      <div className="mb-3" />
 
       {result.groupNames.length === 0 ? (
         <div className="p-10 text-center text-sm text-neutral-400">
           No scout data found in the current filter for this view.
         </div>
       ) : (
-        <ScoutChart result={result} categories={categories} labels={labels} colors={colors} isPct={isPct} />
+        <ScoutChart chartRef={chartRef} result={result} categories={categories} labels={labels} colors={colors} isPct={isPct} />
       )}
     </div>
   )
 }
 
 function ScoutChart({
+  chartRef,
   result,
   categories,
   labels,
   colors,
   isPct,
 }: {
+  chartRef: RefObject<ChartInstance<'bar'> | null>
   result: GroupedResult
   categories: string[]
   labels: Record<string, string>
@@ -215,6 +232,7 @@ function ScoutChart({
   return (
     <div style={{ height: 420 }}>
       <Bar
+        ref={chartRef}
         data={{
           labels: groupNames,
           datasets: categories.map((cat) => ({

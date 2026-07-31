@@ -7,11 +7,13 @@ import { filterFields } from '../../features/fields/filterFields'
 import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
 import { useScoutData } from '../../features/scout/useScoutData'
 import { AiInsightsView } from './AiInsightsView'
+import { AssignScoutModal } from './AssignScoutModal'
 import { CompareView } from './CompareView'
 import { FieldCardsView } from './FieldCardsView'
 import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
 import { HealthTrendView } from './HealthTrendView'
+import { ManageAssignmentsModal } from './ManageAssignmentsModal'
 import { NdviTrendView } from './NdviTrendView'
 import { ScoutAnalyticsView } from './ScoutAnalyticsView'
 import { EMPTY_FILTERS, Sidebar, type SidebarFilters } from './Sidebar'
@@ -33,6 +35,10 @@ export function DashboardShell() {
   const [statFilter, setStatFilter] = useState<StatCardKey | null>(null)
   const [mapFocusPlot, setMapFocusPlot] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [scoutModeActive, setScoutModeActive] = useState(false)
+  const [scoutSelected, setScoutSelected] = useState<Set<string>>(new Set())
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [manageAssignmentsOpen, setManageAssignmentsOpen] = useState(false)
 
   // Sidebar-filtered only (no stat-card category applied) — the stat row
   // itself always reflects this, matching renderStats(filteredRows) in the
@@ -113,6 +119,30 @@ export function DashboardShell() {
     setActiveTab('cards')
   }
 
+  // "Assign Scout" — ports source's openScoutMode()/scoutSelected
+  // (RS_Cane_Monitoring_S1.html:6037-6113): checkbox-select fields on the
+  // Cards tab, then assign them to a real officer via AssignScoutModal.
+  const startScoutMode = () => {
+    setScoutModeActive(true)
+    setScoutSelected(new Set())
+    setMapFocusPlot(null)
+    setFilters((prev) => (prev.plot || prev.plots.length > 0 ? { ...prev, plot: '', plots: [] } : prev))
+    setActiveTab('cards')
+  }
+  const exitScoutMode = () => {
+    setScoutModeActive(false)
+    setScoutSelected(new Set())
+    setAssignModalOpen(false)
+  }
+  const toggleScoutSelect = (plotCode: string) => {
+    setScoutSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(plotCode)) next.delete(plotCode)
+      else next.add(plotCode)
+      return next
+    })
+  }
+
   // Clicking a tab button directly (as opposed to "View on Map" / "View N
   // in Field cards") should always land on the default fit-all view, not a
   // stale focused field or plot-selection left over from a previous jump.
@@ -126,6 +156,7 @@ export function DashboardShell() {
   const handleTabSelect = (tab: TabKey) => {
     setMapFocusPlot(null)
     setFilters((prev) => (prev.plot || prev.plots.length > 0 ? { ...prev, plot: '', plots: [] } : prev))
+    if (tab !== 'cards' && scoutModeActive) exitScoutMode()
     setActiveTab(tab)
   }
 
@@ -142,6 +173,22 @@ export function DashboardShell() {
           </div>
         </div>
         <div className="flex-1" />
+        <button
+          type="button"
+          onClick={startScoutMode}
+          className="rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100"
+          title="Select fields on Field Cards and assign them to an officer"
+        >
+          🧑‍🌾 Assign Scout
+        </button>
+        <button
+          type="button"
+          onClick={() => setManageAssignmentsOpen(true)}
+          className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+          title="View and cancel currently open scout assignments"
+        >
+          📋 Assignments
+        </button>
         <div className="text-right text-xs">
           <div className="font-semibold text-neutral-700">{user?.name}</div>
           <div className="text-neutral-400">{user?.roleLabel}</div>
@@ -230,6 +277,13 @@ export function DashboardShell() {
                       onViewOnMap={viewPlotOnMap}
                       weedSuspicionCodes={weedSuspicionCodes}
                       plantingSuspicionNotes={plantingSuspicionNotes}
+                      scoutModeActive={scoutModeActive}
+                      scoutSelected={scoutSelected}
+                      onToggleScoutSelect={toggleScoutSelect}
+                      onSelectAllScout={() => setScoutSelected(new Set(filteredFields.map((f) => f.code)))}
+                      onClearScoutSelect={() => setScoutSelected(new Set())}
+                      onOpenAssignModal={() => setAssignModalOpen(true)}
+                      onExitScoutMode={exitScoutMode}
                     />
                   )}
                   {activeTab === 'table' && <FieldTableView fields={filteredFields} geoByCode={geoByCode} />}
@@ -275,6 +329,19 @@ export function DashboardShell() {
           )}
         </main>
       </div>
+
+      {assignModalOpen && (
+        <AssignScoutModal
+          plotCodes={[...scoutSelected]}
+          fields={filteredFields}
+          onClose={() => setAssignModalOpen(false)}
+          onAssigned={exitScoutMode}
+        />
+      )}
+
+      {manageAssignmentsOpen && (
+        <ManageAssignmentsModal fields={scopedFields} onClose={() => setManageAssignmentsOpen(false)} />
+      )}
     </div>
   )
 }

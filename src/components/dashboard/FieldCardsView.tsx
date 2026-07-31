@@ -22,6 +22,18 @@ interface FieldCardsViewProps {
    * since they mean very different things. */
   weedSuspicionCodes: Set<string>
   plantingSuspicionNotes: Map<string, string>
+  /** "Assign Scout" mode — checkbox-select fields here, then assign them
+   * to a real officer (see AssignScoutModal.tsx). Ports source's
+   * `scoutMode`/`scoutSelected` (RS_Cane_Monitoring_S1.html:6037-6113),
+   * lifted up to DashboardShell since the entry point (nav button) and
+   * exit (the assign modal) both live outside this view. */
+  scoutModeActive: boolean
+  scoutSelected: Set<string>
+  onToggleScoutSelect: (plotCode: string) => void
+  onSelectAllScout: () => void
+  onClearScoutSelect: () => void
+  onOpenAssignModal: () => void
+  onExitScoutMode: () => void
 }
 
 /** Ports `renderCards()` (RS_Cane_Monitoring_S1.html:4790+) — latest-only
@@ -29,7 +41,20 @@ interface FieldCardsViewProps {
  * with a real NDVI sparkline per card (Phase 3). Clicking a card opens the
  * unified Field Detail popup (NDVI trend, Scout/Follow-up history, Geotag
  * photos, View on Map). */
-export function FieldCardsView({ fields, geoByCode, onViewOnMap, weedSuspicionCodes, plantingSuspicionNotes }: FieldCardsViewProps) {
+export function FieldCardsView({
+  fields,
+  geoByCode,
+  onViewOnMap,
+  weedSuspicionCodes,
+  plantingSuspicionNotes,
+  scoutModeActive,
+  scoutSelected,
+  onToggleScoutSelect,
+  onSelectAllScout,
+  onClearScoutSelect,
+  onOpenAssignModal,
+  onExitScoutMode,
+}: FieldCardsViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>('plantDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
@@ -74,6 +99,32 @@ export function FieldCardsView({ fields, geoByCode, onViewOnMap, weedSuspicionCo
 
   return (
     <div className="space-y-3 p-4">
+      {scoutModeActive && (
+        <div className="sticky top-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-b border-green-200 bg-green-50 px-4 py-2.5">
+          <span className="text-xs font-bold text-green-800">
+            {scoutSelected.size} field{scoutSelected.size !== 1 ? 's' : ''} selected
+          </span>
+          <button type="button" onClick={onSelectAllScout} className="text-xs font-medium text-green-700 underline hover:text-green-900">
+            Select all ({fields.length})
+          </button>
+          <button type="button" onClick={onClearScoutSelect} className="text-xs font-medium text-green-700 underline hover:text-green-900">
+            Clear
+          </button>
+          <div className="flex-1" />
+          <button
+            type="button"
+            disabled={scoutSelected.size === 0}
+            onClick={onOpenAssignModal}
+            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-40"
+          >
+            Assign to officer →
+          </button>
+          <button type="button" onClick={onExitScoutMode} className="text-xs font-medium text-neutral-500 hover:text-neutral-700">
+            Exit
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 text-xs font-medium text-neutral-500">
         Sort by
         <button
@@ -101,6 +152,9 @@ export function FieldCardsView({ fields, geoByCode, onViewOnMap, weedSuspicionCo
             onOpenDetail={() => setDetailField(field)}
             isWeedSuspicion={weedSuspicionCodes.has(field.code)}
             plantingSuspicionNote={plantingSuspicionNotes.get(field.code)}
+            scoutModeActive={scoutModeActive}
+            scoutChecked={scoutSelected.has(field.code)}
+            onToggleScoutSelect={() => onToggleScoutSelect(field.code)}
           />
         ))}
       </div>
@@ -149,12 +203,18 @@ function FieldCard({
   onOpenDetail,
   isWeedSuspicion,
   plantingSuspicionNote,
+  scoutModeActive,
+  scoutChecked,
+  onToggleScoutSelect,
 }: {
   field: Field
   geo: FieldGeo | undefined
   onOpenDetail: () => void
   isWeedSuspicion: boolean
   plantingSuspicionNote: string | undefined
+  scoutModeActive: boolean
+  scoutChecked: boolean
+  onToggleScoutSelect: () => void
 }) {
   const ndviRange =
     geo?.thresholdMin != null && geo?.thresholdMax != null
@@ -171,10 +231,22 @@ function FieldCard({
         if (e.key === 'Enter' || e.key === ' ') onOpenDetail()
       }}
       title="View field details"
-      className="cursor-pointer rounded-lg border border-neutral-200 bg-white p-3 hover:border-neutral-300"
+      className={`cursor-pointer rounded-lg border bg-white p-3 hover:border-neutral-300 ${
+        scoutModeActive && scoutChecked ? 'border-green-400 ring-1 ring-green-300' : 'border-neutral-200'
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        {scoutModeActive && (
+          <input
+            type="checkbox"
+            checked={scoutChecked}
+            onChange={onToggleScoutSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-neutral-300"
+            aria-label={`Select ${field.name} for scout assignment`}
+          />
+        )}
+        <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-neutral-800">{field.name}</div>
           <div className="mt-0.5 text-xs font-semibold text-neutral-600">
             {field.code}

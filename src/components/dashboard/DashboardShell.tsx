@@ -17,6 +17,7 @@ import { FieldTableView } from './FieldTableView'
 import { HealthTrendView } from './HealthTrendView'
 import { ManageAssignmentsModal } from './ManageAssignmentsModal'
 import { NdviTrendView } from './NdviTrendView'
+import { OverviewView } from './OverviewView'
 import { ScoutAnalyticsView } from './ScoutAnalyticsView'
 import { EMPTY_FILTERS, Sidebar, type SidebarFilters } from './Sidebar'
 import { StageSummaryView } from './StageSummaryView'
@@ -34,7 +35,7 @@ export function DashboardShell() {
   const officersQuery = useOfficers()
 
   const [filters, setFilters] = useState<SidebarFilters>(EMPTY_FILTERS)
-  const [activeTab, setActiveTab] = useState<TabKey>('trend')
+  const [activeTab, setActiveTab] = useState<TabKey>('overview')
   const [statFilter, setStatFilter] = useState<StatCardKey | null>(null)
   const [mapFocusPlot, setMapFocusPlot] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -227,7 +228,8 @@ export function DashboardShell() {
               fields={scopedFields}
               filters={filters}
               onChange={setFilters}
-              onOverviewClick={() => setActiveTab('trend')}
+              onOverviewClick={() => setActiveTab('overview')}
+              overviewActive={activeTab === 'overview'}
             />
           </div>
         </div>
@@ -263,6 +265,19 @@ export function DashboardShell() {
               <div>
                 <TabBar active={activeTab} onSelect={handleTabSelect} />
                 <div className="rounded-b-md border border-t-0 border-neutral-200 bg-white">
+                  {activeTab === 'overview' &&
+                    (scoutQuery.isSuccess ? (
+                      <OverviewView
+                        fields={sidebarFilteredFields}
+                        geoByCode={geoByCode}
+                        scoutData={scoutQuery.data}
+                        onViewGroupInCards={viewGroupInCards}
+                      />
+                    ) : (
+                      <div className="p-10 text-center text-sm text-neutral-400">
+                        {scoutQuery.isLoading ? 'Loading scout data…' : 'Failed to load scout data.'}
+                      </div>
+                    ))}
                   {activeTab === 'trend' && (
                     <HealthTrendView fields={filteredFields} geoByCode={geoByCode} seasons={filters.seasons} />
                   )}
@@ -326,7 +341,8 @@ export function DashboardShell() {
                         {scoutQuery.isLoading ? 'Loading scout data…' : 'Failed to load scout data.'}
                       </div>
                     ))}
-                  {activeTab !== 'trend' &&
+                  {activeTab !== 'overview' &&
+                    activeTab !== 'trend' &&
                     activeTab !== 'compare' &&
                     activeTab !== 'scoutAnalytics' &&
                     activeTab !== 'cards' &&

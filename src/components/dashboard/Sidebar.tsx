@@ -45,6 +45,7 @@ interface SidebarProps {
   filters: SidebarFilters
   onChange: (next: SidebarFilters) => void
   onOverviewClick: () => void
+  overviewActive: boolean
 }
 
 function uniqueSorted(values: (string | null | undefined)[]): string[] {
@@ -57,7 +58,7 @@ function uniqueSorted(values: (string | null | undefined)[]): string[] {
  * used it yet; Plant Season and Farmer now get a real multi-select via
  * MultiSelectDropdown since they need it), plus non-cascading Plot
  * Type/Crop Stage/Crop Status. */
-export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarProps) {
+export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewActive }: SidebarProps) {
   const clients = useMemo(() => uniqueSorted(fields.map((f) => f.clientCode)), [fields])
 
   const factoryScoped = useMemo(
@@ -116,9 +117,13 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick }: SidebarP
       <button
         type="button"
         onClick={onOverviewClick}
-        className="w-full rounded-lg bg-gradient-to-br from-blue-800 to-blue-600 px-3 py-2.5 text-sm font-bold text-white shadow-sm"
+        className={`w-full rounded-lg px-3 py-2.5 text-sm font-bold text-white shadow-sm transition ${
+          overviewActive
+            ? 'bg-gradient-to-br from-green-600 to-green-500 ring-2 ring-green-300 ring-offset-1'
+            : 'bg-gradient-to-br from-blue-800 to-blue-600'
+        }`}
       >
-        📊 Overview — Executive Summary
+        📊 Executive Summary
       </button>
 
       <div>
@@ -212,13 +217,16 @@ function FilterSelect({
   options: string[]
   onChange: (value: string) => void
 }) {
+  const active = value !== ''
   return (
-    <label className="block text-xs font-medium text-neutral-500">
+    <label className={`block text-xs font-medium ${active ? 'text-green-700' : 'text-neutral-500'}`}>
       {label}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm text-neutral-800"
+        className={`mt-1 w-full rounded-md border px-2 py-1.5 text-sm text-neutral-800 ${
+          active ? 'border-green-400 bg-green-50' : 'border-neutral-200'
+        }`}
       >
         <option value="">All</option>
         {options.map((o) => (

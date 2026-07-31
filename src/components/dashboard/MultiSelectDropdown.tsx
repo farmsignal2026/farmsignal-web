@@ -55,14 +55,17 @@ export function MultiSelectDropdown({
           .map((v) => options.find((o) => o.value === v)?.label ?? v)
           .join(', ')
 
+  const active = selected.length > 0
   return (
     <div ref={rootRef} className="relative">
-      <label className="block text-xs font-medium text-neutral-500">
+      <label className={`block text-xs font-medium ${active ? 'text-green-700' : 'text-neutral-500'}`}>
         {label}
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="mt-1 flex w-full items-center justify-between rounded-md border border-neutral-200 px-2 py-1.5 text-left text-sm text-neutral-800"
+          className={`mt-1 flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-sm text-neutral-800 ${
+            active ? 'border-green-400 bg-green-50' : 'border-neutral-200'
+          }`}
         >
           <span className="truncate">{triggerText}</span>
           <span className="ml-1 shrink-0 text-neutral-400">▾</span>

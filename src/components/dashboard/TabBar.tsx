@@ -1,4 +1,5 @@
 export type TabKey =
+  | 'overview'
   | 'trend'
   | 'compare'
   | 'scoutAnalytics'
@@ -10,6 +11,7 @@ export type TabKey =
   | 'insights'
 
 export const TABS: { key: TabKey; label: string }[] = [
+  { key: 'overview', label: '📊 Executive Summary' },
   { key: 'trend', label: '📊 Health Trend' },
   { key: 'compare', label: '⚖️ Compare' },
   { key: 'scoutAnalytics', label: '🔍 Scout Analytics' },

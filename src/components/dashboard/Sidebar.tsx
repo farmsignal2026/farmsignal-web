@@ -134,7 +134,16 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewAc
       </button>
 
       <div>
-        <div className="mb-2 text-xs font-semibold text-neutral-500">🔎 Filters</div>
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-xs font-semibold text-neutral-500">🔎 Filters</div>
+          <button
+            type="button"
+            onClick={() => onChange(EMPTY_FILTERS)}
+            className="text-[11px] font-medium text-neutral-500 hover:text-green-700 hover:underline"
+          >
+            ↺ Reset filters
+          </button>
+        </div>
         <div className="space-y-3">
           <FilterSelect
             label="Client"
@@ -214,13 +223,6 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewAc
             SAR estimate
           </label>
         </div>
-        <button
-          type="button"
-          onClick={() => onChange(EMPTY_FILTERS)}
-          className="mt-3 w-full rounded-md border border-neutral-200 py-2 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
-        >
-          ↺ Reset filters
-        </button>
       </div>
     </aside>
   )

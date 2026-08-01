@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useAuth } from '../../features/auth/useAuth'
 import { computePlantingDateSuspicion, computeWeedSuspicion } from '../../features/fields/aiInsights'
@@ -15,6 +16,7 @@ import { FieldCardsView } from './FieldCardsView'
 import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
 import { HealthTrendView } from './HealthTrendView'
+import { ImportFieldsModal } from './ImportFieldsModal'
 import { ManageAssignmentsModal } from './ManageAssignmentsModal'
 import { NdviTrendView } from './NdviTrendView'
 import { OverviewView } from './OverviewView'
@@ -28,6 +30,7 @@ import { TabBar, TabPanel, type TabKey } from './TabBar'
  * structural chrome of RS_Cane_Monitoring_S1.html:610-870. */
 export function DashboardShell() {
   const { user, signOut } = useAuth()
+  const queryClient = useQueryClient()
   const fieldsQuery = useFieldsData()
   const scopedFields = useScopedFields()
   const geoByCode = useGeoByCode()
@@ -44,6 +47,9 @@ export function DashboardShell() {
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [manageAssignmentsOpen, setManageAssignmentsOpen] = useState(false)
   const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
+
+  const canImportFields = user?.role === 'admin' || user?.role === 'manager'
 
   // Sidebar-filtered only (no stat-card category applied) — the stat row
   // itself always reflects this, matching renderStats(filteredRows) in the
@@ -202,6 +208,16 @@ export function DashboardShell() {
         >
           ⬇ Export
         </button>
+        {canImportFields && (
+          <button
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+            title="Bulk-import new plots from a filled-in template"
+          >
+            ➕ Import Fields
+          </button>
+        )}
         <div className="text-right text-xs">
           <div className="font-semibold text-neutral-700">{user?.name}</div>
           <div className="text-neutral-400">{user?.roleLabel}</div>
@@ -378,6 +394,16 @@ export function DashboardShell() {
           scoutData={scoutQuery.data}
           officers={officersQuery.data ?? []}
           onClose={() => setExportModalOpen(false)}
+        />
+      )}
+
+      {importModalOpen && (
+        <ImportFieldsModal
+          onClose={() => setImportModalOpen(false)}
+          onImported={() => {
+            setImportModalOpen(false)
+            queryClient.invalidateQueries({ queryKey: ['fields-data'] })
+          }}
         />
       )}
     </div>

@@ -99,13 +99,24 @@ export function DashboardShell() {
     return map
   }, [filteredFields, geoByCode])
 
+  // Preserves every other sidebar filter (client/factory/division/etc.) —
+  // only the plot-selection fields themselves get overwritten, clearing
+  // each other so they don't combine into an impossible AND (e.g. plot='X'
+  // together with a leftover plots=['Y','Z'] from an earlier jump). Safe to
+  // preserve the rest unconditionally: whatever plot code(s) got jumped to
+  // here were already computed FROM the currently-filtered field list, so
+  // re-applying those same filters can never hide the very plot(s) being
+  // jumped to. Real user-reported bug, 2026-08-01: resetting via
+  // EMPTY_FILTERS meant clicking a Scout Analytics bar segment silently
+  // dropped an active Client/Factory selection, so returning to that tab
+  // afterward showed unfiltered data instead of what the user had set up.
   const viewPlotInCards = (plotCode: string) => {
-    setFilters({ ...EMPTY_FILTERS, plot: plotCode })
+    setFilters((prev) => ({ ...prev, plot: plotCode, plots: [] }))
     setActiveTab('cards')
   }
 
   const viewPlotsInCards = (plotCodes: string[]) => {
-    setFilters({ ...EMPTY_FILTERS, plots: plotCodes })
+    setFilters((prev) => ({ ...prev, plots: plotCodes, plot: '' }))
     setActiveTab('cards')
   }
 

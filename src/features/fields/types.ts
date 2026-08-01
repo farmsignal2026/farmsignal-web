@@ -25,6 +25,12 @@ export interface Field {
   healthStatus: HealthStatus
   farmerCode: string
   needsScout: boolean
+  /** True when this field has NEVER had a real S2 (optical) observation —
+   * its classification, if any, comes entirely from S1 (SAR) gap-fill
+   * estimates. Excluded by default (Sidebar's "SAR estimate" toggle off),
+   * matching source's `includeS1Data` behavior — an S1-only reading isn't
+   * accurate enough to treat as real data unless explicitly opted in. */
+  s1OnlyData: boolean
 }
 
 export interface StagePoint {

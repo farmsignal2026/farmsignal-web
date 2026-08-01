@@ -325,6 +325,7 @@ export class FieldsRepository {
         healthStatus,
         farmerCode: farmer ? ((farmer.farmer_code as string | null) ?? '') : '',
         needsScout,
+        s1OnlyData: history.length > 0 && history.every((h) => h.isS1),
       })
 
       geoData.push({

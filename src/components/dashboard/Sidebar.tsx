@@ -23,6 +23,12 @@ export interface SidebarFilters {
   cropStatus: string
   seasons: string[]
   farmers: string[]
+  /** "Include S1 (SAR) estimates" — off by default, matching source's
+   * `includeS1Data`. S1 (radar) readings are a cloudy-period gap-fill
+   * estimate, not a real optical measurement; a plot that has NEVER had a
+   * real S2 reading is excluded entirely rather than shown with an
+   * estimated value, unless this is switched on. */
+  includeS1: boolean
 }
 
 export const EMPTY_FILTERS: SidebarFilters = {
@@ -38,6 +44,7 @@ export const EMPTY_FILTERS: SidebarFilters = {
   cropStatus: '',
   seasons: [],
   farmers: [],
+  includeS1: false,
 }
 
 interface SidebarProps {
@@ -117,10 +124,10 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewAc
       <button
         type="button"
         onClick={onOverviewClick}
-        className={`w-full rounded-lg px-3 py-2.5 text-sm font-bold text-white shadow-sm transition ${
+        className={`w-full rounded-lg px-3 py-2.5 text-sm font-bold shadow-sm transition ${
           overviewActive
-            ? 'bg-gradient-to-br from-green-600 to-green-500 ring-2 ring-green-300 ring-offset-1'
-            : 'bg-gradient-to-br from-blue-800 to-blue-600'
+            ? 'bg-gradient-to-br from-green-500 to-green-400 text-white ring-2 ring-green-200 ring-offset-1'
+            : 'border border-neutral-200 bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
         }`}
       >
         📊 Executive Summary
@@ -193,6 +200,19 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewAc
             options={['Good', 'Moderate', 'Need attention']}
             onChange={(v) => set({ cropStatus: v })}
           />
+          <label
+            className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium ${
+              filters.includeS1 ? 'border-green-400 bg-green-50 text-green-700' : 'border-neutral-200 text-neutral-600'
+            }`}
+            title="S1 (SAR) readings are a gap-fill estimate for cloudy periods, not a real optical measurement. Off by default — a plot with only S1 data and no real satellite reading is treated as having no data, rather than showing an estimate."
+          >
+            <input
+              type="checkbox"
+              checked={filters.includeS1}
+              onChange={(e) => set({ includeS1: e.target.checked })}
+            />
+            SAR estimate
+          </label>
         </div>
         <button
           type="button"

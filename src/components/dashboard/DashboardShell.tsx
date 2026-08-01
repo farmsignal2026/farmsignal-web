@@ -188,9 +188,19 @@ export function DashboardShell() {
   // to "unselect" it. Only the two jump-only filter fields are cleared
   // here; a deliberate drill-down filter (e.g. Compare's "view this client
   // in cards") is left alone since that one's meant to persist across tabs.
+  //
+  // Exception: moving directly between Cards and Table doesn't clear the
+  // plot selection — both are just different views of the same field list,
+  // so a Scout Analytics segment click (jumps to Cards, filtered to those
+  // plots) should still show that same narrowed list if the user switches
+  // to Table right after, not silently widen back to the full KPI filter.
+  // Real user report, 2026-08-01.
   const handleTabSelect = (tab: TabKey) => {
     setMapFocusPlot(null)
-    setFilters((prev) => (prev.plot || prev.plots.length > 0 ? { ...prev, plot: '', plots: [] } : prev))
+    const stayingInListView = (activeTab === 'cards' || activeTab === 'table') && (tab === 'cards' || tab === 'table')
+    if (!stayingInListView) {
+      setFilters((prev) => (prev.plot || prev.plots.length > 0 ? { ...prev, plot: '', plots: [] } : prev))
+    }
     if (tab !== 'cards' && scoutModeActive) exitScoutMode()
     setActiveTab(tab)
   }

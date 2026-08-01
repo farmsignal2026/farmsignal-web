@@ -15,6 +15,27 @@ export const SCOUT_GROUP_LABEL = COMPARE_GROUP_LABEL
 export type ScoutView = 'status' | 'reasons' | 'followup' | 'yield'
 export type ScoutMetric = 'count' | 'pct'
 
+/** Lifted to DashboardShell rather than kept as ScoutAnalyticsView's own
+ * local useState — that view is conditionally rendered per tab (unmounted
+ * whenever the user navigates away, e.g. jumping to Field Cards from a
+ * chart click), so local state would silently reset View/Group-by/Metric/
+ * Top-3 on every return trip. Real user report, 2026-08-01. Lives here
+ * (the always-loaded data module) rather than in the lazy-loaded view file
+ * so DashboardShell doesn't need to import from a lazy chunk just for a type. */
+export interface ScoutAnalyticsState {
+  groupKey: ScoutGroupKey
+  view: ScoutView
+  metric: ScoutMetric
+  top3Only: boolean
+}
+
+export const DEFAULT_SCOUT_ANALYTICS_STATE: ScoutAnalyticsState = {
+  groupKey: 'division',
+  view: 'status',
+  metric: 'count',
+  top3Only: false,
+}
+
 /** Ascending by total — Chart.js horizontal bars render the first label at
  * the BOTTOM, so ascending order puts the highest-value group at the
  * visual top (ports `saSortGroupsByTotal()`, :8211-8217 — ALWAYS a plain

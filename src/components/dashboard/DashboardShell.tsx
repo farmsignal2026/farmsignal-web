@@ -7,6 +7,7 @@ import type { StatCardKey } from '../../features/fields/computeFieldStats'
 import { filterFields } from '../../features/fields/filterFields'
 import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
 import { useOfficers } from '../../features/officers/useOfficers'
+import { DEFAULT_SCOUT_ANALYTICS_STATE, type ScoutAnalyticsState } from '../../features/fields/scoutAnalytics'
 import { useScoutData } from '../../features/scout/useScoutData'
 import { AiInsightsView } from './AiInsightsView'
 import { AssignScoutModal } from './AssignScoutModal'
@@ -59,6 +60,7 @@ export function DashboardShell() {
   const [manageAssignmentsOpen, setManageAssignmentsOpen] = useState(false)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [scoutAnalyticsState, setScoutAnalyticsState] = useState<ScoutAnalyticsState>(DEFAULT_SCOUT_ANALYTICS_STATE)
 
   const canImportFields = user?.role === 'admin' || user?.role === 'manager'
 
@@ -393,6 +395,8 @@ export function DashboardShell() {
                         geoByCode={geoByCode}
                         scoutData={scoutQuery.data}
                         onViewPlotsInCards={viewPlotsInCards}
+                        state={scoutAnalyticsState}
+                        onStateChange={(patch) => setScoutAnalyticsState((prev) => ({ ...prev, ...patch }))}
                       />
                     ) : (
                       <div className="p-10 text-center text-sm text-neutral-400">

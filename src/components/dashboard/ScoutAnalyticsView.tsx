@@ -1,5 +1,5 @@
 import type { Chart as ChartInstance } from 'chart.js'
-import { useMemo, useRef, useState, type RefObject } from 'react'
+import { useMemo, useRef, type RefObject } from 'react'
 import { Bar } from 'react-chartjs-2'
 import { downloadChartExcel, downloadChartPNG, printChartAsPDF } from '../../lib/exportUtils'
 import { ExportButtonRow } from './ExportButtonRow'
@@ -19,6 +19,7 @@ import {
   computeScoutStatus,
   computeScoutYield,
   type GroupedResult,
+  type ScoutAnalyticsState,
   type ScoutGroupKey,
   type ScoutMetric,
   type ScoutView,
@@ -33,6 +34,12 @@ interface ScoutAnalyticsViewProps {
   geoByCode: Record<string, FieldGeo>
   scoutData: ScoutData
   onViewPlotsInCards: (plotCodes: string[]) => void
+  /** Lifted to DashboardShell — this view is conditionally rendered per tab
+   * (unmounted whenever the user navigates away), so local useState would
+   * silently reset View/Group-by/Metric/Top-3 every time the user jumped to
+   * Field Cards and came back. Real user report, 2026-08-01. */
+  state: ScoutAnalyticsState
+  onStateChange: (patch: Partial<ScoutAnalyticsState>) => void
 }
 
 const GROUP_KEYS: ScoutGroupKey[] = ['client', 'factory', 'division', 'farmer', 'plotType', 'stage', 'variety']
@@ -57,11 +64,19 @@ const VIEW_LABEL: Record<ScoutView, string> = {
  * "click a legend item to re-sort by visible categories" interaction
  * (`saResortChartByVisible`), which stays out of scope. Export buttons
  * (Excel/PDF/PNG) ported in Phase 7 — see `exportUtils.ts`. */
-export function ScoutAnalyticsView({ fields, geoByCode, scoutData, onViewPlotsInCards }: ScoutAnalyticsViewProps) {
-  const [groupKey, setGroupKey] = useState<ScoutGroupKey>('division')
-  const [view, setView] = useState<ScoutView>('status')
-  const [metric, setMetric] = useState<ScoutMetric>('count')
-  const [top3Only, setTop3Only] = useState(false)
+export function ScoutAnalyticsView({
+  fields,
+  geoByCode,
+  scoutData,
+  onViewPlotsInCards,
+  state,
+  onStateChange,
+}: ScoutAnalyticsViewProps) {
+  const { groupKey, view, metric, top3Only } = state
+  const setGroupKey = (groupKey: ScoutGroupKey) => onStateChange({ groupKey })
+  const setView = (view: ScoutView) => onStateChange({ view })
+  const setMetric = (metric: ScoutMetric) => onStateChange({ metric })
+  const setTop3Only = (top3Only: boolean) => onStateChange({ top3Only })
   const chartRef = useRef<ChartInstance<'bar'> | null>(null)
 
   const result = useMemo<GroupedResult>(() => {

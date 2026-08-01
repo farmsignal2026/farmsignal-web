@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { useAuth } from '../../features/auth/useAuth'
 import { computePlantingDateSuspicion, computeWeedSuspicion } from '../../features/fields/aiInsights'
 import type { CompareGroupKey } from '../../features/fields/compare'
@@ -10,21 +10,32 @@ import { useOfficers } from '../../features/officers/useOfficers'
 import { useScoutData } from '../../features/scout/useScoutData'
 import { AiInsightsView } from './AiInsightsView'
 import { AssignScoutModal } from './AssignScoutModal'
-import { CompareView } from './CompareView'
-import { ExportModal } from './ExportModal'
 import { FieldCardsView } from './FieldCardsView'
-import { FieldMapView } from './FieldMapView'
 import { FieldTableView } from './FieldTableView'
-import { HealthTrendView } from './HealthTrendView'
-import { ImportFieldsModal } from './ImportFieldsModal'
 import { ManageAssignmentsModal } from './ManageAssignmentsModal'
-import { NdviTrendView } from './NdviTrendView'
 import { OverviewView } from './OverviewView'
-import { ScoutAnalyticsView } from './ScoutAnalyticsView'
 import { EMPTY_FILTERS, Sidebar, type SidebarFilters } from './Sidebar'
 import { StageSummaryView } from './StageSummaryView'
 import { StatRow } from './StatRow'
 import { TabBar, TabPanel, type TabKey } from './TabBar'
+
+// Lazily loaded — each pulls in a large third-party dependency (Leaflet,
+// Chart.js, or SheetJS/xlsx) not needed for the app's default landing tab
+// (Executive Summary) or its lightweight tabs (Cards/Table/Summary), so
+// deferring them keeps first paint after login fast. Named exports need the
+// `.then(m => ({ default: m.X }))` reshape since React.lazy only accepts a
+// module with a `default` export.
+const CompareView = lazy(() => import('./CompareView').then((m) => ({ default: m.CompareView })))
+const FieldMapView = lazy(() => import('./FieldMapView').then((m) => ({ default: m.FieldMapView })))
+const HealthTrendView = lazy(() => import('./HealthTrendView').then((m) => ({ default: m.HealthTrendView })))
+const NdviTrendView = lazy(() => import('./NdviTrendView').then((m) => ({ default: m.NdviTrendView })))
+const ScoutAnalyticsView = lazy(() => import('./ScoutAnalyticsView').then((m) => ({ default: m.ScoutAnalyticsView })))
+const ExportModal = lazy(() => import('./ExportModal').then((m) => ({ default: m.ExportModal })))
+const ImportFieldsModal = lazy(() => import('./ImportFieldsModal').then((m) => ({ default: m.ImportFieldsModal })))
+
+function TabLoadingFallback() {
+  return <div className="p-10 text-center text-sm text-neutral-400">Loading…</div>
+}
 
 /** App shell: top nav, filter sidebar, stat row, tab shell — ports the
  * structural chrome of RS_Cane_Monitoring_S1.html:610-870. */
@@ -186,6 +197,19 @@ export function DashboardShell() {
         <div className="flex-1" />
         <button
           type="button"
+          onClick={() => {
+            fieldsQuery.refetch()
+            scoutQuery.refetch()
+            officersQuery.refetch()
+          }}
+          disabled={fieldsQuery.isFetching || scoutQuery.isFetching || officersQuery.isFetching}
+          className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+          title="Refresh field, scout, and officer data now"
+        >
+          {fieldsQuery.isFetching || scoutQuery.isFetching || officersQuery.isFetching ? '🔄 Refreshing…' : '🔄 Refresh'}
+        </button>
+        <button
+          type="button"
           onClick={startScoutMode}
           className="rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100"
           title="Select fields on Field Cards and assign them to an officer"
@@ -216,6 +240,16 @@ export function DashboardShell() {
             title="Bulk-import new plots from a filled-in template"
           >
             ➕ Import Fields
+          </button>
+        )}
+        {officersQuery.isError && (
+          <button
+            type="button"
+            onClick={() => officersQuery.refetch()}
+            className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+            title="The officer list failed to load — Assign Scout and Export reports may show it as empty. Click to retry."
+          >
+            ⚠ Officers failed to load — Retry
           </button>
         )}
         <div className="text-right text-xs">
@@ -267,11 +301,33 @@ export function DashboardShell() {
           )}
           {fieldsQuery.isError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center text-sm text-red-600">
-              {fieldsQuery.error instanceof Error ? fieldsQuery.error.message : 'Failed to load field data.'}
+              <div>{fieldsQuery.error instanceof Error ? fieldsQuery.error.message : 'Failed to load field data.'}</div>
+              <button
+                type="button"
+                onClick={() => fieldsQuery.refetch()}
+                className="mt-3 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+              >
+                Retry
+              </button>
             </div>
           )}
           {fieldsQuery.isSuccess && (
             <>
+              {fieldsQuery.data.boundariesFailed && (
+                <div className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <span>
+                    ⚠ Map boundaries failed to load — every plot may show as "Not Mapped" until this is retried, even
+                    ones that really have a GPS survey.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => fieldsQuery.refetch()}
+                    className="ml-3 shrink-0 rounded border border-amber-300 bg-white px-2 py-1 font-semibold hover:bg-amber-100"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               <StatRow
                 fields={sidebarFilteredFields}
                 geoByCode={geoByCode}
@@ -281,6 +337,7 @@ export function DashboardShell() {
               <div>
                 <TabBar active={activeTab} onSelect={handleTabSelect} />
                 <div className="rounded-b-md border border-t-0 border-neutral-200 bg-white">
+                  <Suspense fallback={<TabLoadingFallback />}>
                   {activeTab === 'overview' &&
                     (scoutQuery.isSuccess ? (
                       <OverviewView
@@ -291,7 +348,20 @@ export function DashboardShell() {
                       />
                     ) : (
                       <div className="p-10 text-center text-sm text-neutral-400">
-                        {scoutQuery.isLoading ? 'Loading scout data…' : 'Failed to load scout data.'}
+                        {scoutQuery.isLoading ? (
+                          'Loading scout data…'
+                        ) : (
+                          <>
+                            Failed to load scout data.{' '}
+                            <button
+                              type="button"
+                              onClick={() => scoutQuery.refetch()}
+                              className="font-semibold text-green-700 hover:underline"
+                            >
+                              Retry
+                            </button>
+                          </>
+                        )}
                       </div>
                     ))}
                   {activeTab === 'trend' && (
@@ -310,7 +380,20 @@ export function DashboardShell() {
                       <ScoutAnalyticsView fields={filteredFields} geoByCode={geoByCode} scoutData={scoutQuery.data} />
                     ) : (
                       <div className="p-10 text-center text-sm text-neutral-400">
-                        {scoutQuery.isLoading ? 'Loading scout data…' : 'Failed to load scout data.'}
+                        {scoutQuery.isLoading ? (
+                          'Loading scout data…'
+                        ) : (
+                          <>
+                            Failed to load scout data.{' '}
+                            <button
+                              type="button"
+                              onClick={() => scoutQuery.refetch()}
+                              className="font-semibold text-green-700 hover:underline"
+                            >
+                              Retry
+                            </button>
+                          </>
+                        )}
                       </div>
                     ))}
                   {activeTab === 'cards' && (
@@ -354,7 +437,20 @@ export function DashboardShell() {
                       />
                     ) : (
                       <div className="p-10 text-center text-sm text-neutral-400">
-                        {scoutQuery.isLoading ? 'Loading scout data…' : 'Failed to load scout data.'}
+                        {scoutQuery.isLoading ? (
+                          'Loading scout data…'
+                        ) : (
+                          <>
+                            Failed to load scout data.{' '}
+                            <button
+                              type="button"
+                              onClick={() => scoutQuery.refetch()}
+                              className="font-semibold text-green-700 hover:underline"
+                            >
+                              Retry
+                            </button>
+                          </>
+                        )}
                       </div>
                     ))}
                   {activeTab !== 'overview' &&
@@ -367,6 +463,7 @@ export function DashboardShell() {
                     activeTab !== 'chart' &&
                     activeTab !== 'map' &&
                     activeTab !== 'insights' && <TabPanel tab={activeTab} />}
+                  </Suspense>
                 </div>
               </div>
             </>
@@ -388,23 +485,27 @@ export function DashboardShell() {
       )}
 
       {exportModalOpen && (
-        <ExportModal
-          fields={filteredFields}
-          geoByCode={geoByCode}
-          scoutData={scoutQuery.data}
-          officers={officersQuery.data ?? []}
-          onClose={() => setExportModalOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <ExportModal
+            fields={filteredFields}
+            geoByCode={geoByCode}
+            scoutData={scoutQuery.data}
+            officers={officersQuery.data ?? []}
+            onClose={() => setExportModalOpen(false)}
+          />
+        </Suspense>
       )}
 
       {importModalOpen && (
-        <ImportFieldsModal
-          onClose={() => setImportModalOpen(false)}
-          onImported={() => {
-            setImportModalOpen(false)
-            queryClient.invalidateQueries({ queryKey: ['fields-data'] })
-          }}
-        />
+        <Suspense fallback={null}>
+          <ImportFieldsModal
+            onClose={() => setImportModalOpen(false)}
+            onImported={() => {
+              setImportModalOpen(false)
+              queryClient.invalidateQueries({ queryKey: ['fields-data'] })
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )

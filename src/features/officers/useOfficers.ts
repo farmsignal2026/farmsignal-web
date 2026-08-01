@@ -16,5 +16,6 @@ export function useOfficers() {
     queryFn: () => officersRepository.loadActive(),
     enabled: status === 'authed' && user !== null,
     staleTime: Infinity,
+    refetchOnWindowFocus: 'always',
   })
 }

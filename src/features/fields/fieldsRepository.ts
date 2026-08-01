@@ -106,7 +106,17 @@ export class FieldsRepository {
     }
 
     const boundaryByPlot: Record<string, { polygon: [number, number][]; centroid: [number, number]; gpsAcre: number | null }> = {}
-    const { data: bndData } = await this.client.rpc('get_plot_boundaries')
+    const { data: bndData, error: bndErr } = await this.client.rpc('get_plot_boundaries')
+    let boundariesFailed = false
+    if (bndErr) {
+      // Deliberately don't throw — a boundary-fetch failure shouldn't take
+      // down the whole field list, just leave every plot showing as "Not
+      // Mapped" until retried. But that's a real, confusing-looking failure
+      // mode if silent, so it's tracked and surfaced in the UI instead of
+      // only reaching the console.
+      console.error('get_plot_boundaries RPC failed:', bndErr)
+      boundariesFailed = true
+    }
     for (const row of (bndData ?? []) as Record<string, unknown>[]) {
       const geojsonStr = row.geojson as string | null
       if (!geojsonStr) continue
@@ -352,6 +362,6 @@ export class FieldsRepository {
       throw new Error('No plots returned from Supabase.')
     }
 
-    return { fields, geoData, scoutByPlot }
+    return { fields, geoData, scoutByPlot, boundariesFailed }
   }
 }

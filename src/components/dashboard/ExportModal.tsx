@@ -38,6 +38,7 @@ interface ReportDef {
  * not quoted text — pivots straight into Excel without reformatting. */
 export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }: ExportModalProps) {
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
 
   const reports: ReportDef[] = [
     {
@@ -89,6 +90,7 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
 
   async function handleDownload(report: ReportDef) {
     setDownloading(report.key)
+    setDownloadError(null)
     try {
       const rows = report.build()
       if (rows.length === 0) {
@@ -96,6 +98,8 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
         return
       }
       downloadXLSX(report.filenamePrefix, report.sheetName, rows)
+    } catch (e) {
+      setDownloadError(`Could not build "${report.label}": ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setDownloading(null)
     }
@@ -115,6 +119,9 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
         </div>
 
         <div className="space-y-2 p-4">
+          {downloadError && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{downloadError}</div>
+          )}
           {reports.map((r) => {
             const disabled = r.needsScout && !scoutData
             return (

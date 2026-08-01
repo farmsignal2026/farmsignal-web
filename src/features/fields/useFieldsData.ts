@@ -11,7 +11,12 @@ const fieldsRepository = new FieldsRepository(supabase)
 /** Loads once per login, mirroring the Flutter `fieldsDataProvider`
  * (fields/application/fields_controller.dart) — TanStack Query caches by
  * the authed officer's id, so re-mounts don't refetch, and a future
- * mutation (e.g. a GeoTag save) can call `queryClient.invalidateQueries`. */
+ * mutation (e.g. a GeoTag save) can call `queryClient.invalidateQueries`.
+ * `staleTime: Infinity` still means a plain re-render never refetches, but
+ * `refetchOnWindowFocus: 'always'` forces one specifically when the user
+ * switches back to this browser tab — so a scout visit or new satellite
+ * pass someone else added shows up without a full logout/login, without
+ * adding any background polling while the tab isn't in focus. */
 export function useFieldsData() {
   const { user, status } = useAuth()
 
@@ -20,6 +25,7 @@ export function useFieldsData() {
     queryFn: () => fieldsRepository.loadFieldData(),
     enabled: status === 'authed' && user !== null,
     staleTime: Infinity,
+    refetchOnWindowFocus: 'always',
   })
 }
 

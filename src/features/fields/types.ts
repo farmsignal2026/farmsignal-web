@@ -92,4 +92,7 @@ export interface FieldsLoadResult {
   fields: Field[]
   geoData: FieldGeo[]
   scoutByPlot: Record<string, ScoutVisit[]>
+  /** True when the `get_plot_boundaries` RPC failed — every plot shows as
+   * "Not Mapped" until a retry, not because it genuinely has no survey. */
+  boundariesFailed: boolean
 }

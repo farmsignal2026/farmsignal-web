@@ -32,6 +32,7 @@ interface ScoutAnalyticsViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
   scoutData: ScoutData
+  onViewPlotsInCards: (plotCodes: string[]) => void
 }
 
 const GROUP_KEYS: ScoutGroupKey[] = ['client', 'factory', 'division', 'farmer', 'plotType', 'stage', 'variety']
@@ -56,7 +57,7 @@ const VIEW_LABEL: Record<ScoutView, string> = {
  * "click a legend item to re-sort by visible categories" interaction
  * (`saResortChartByVisible`), which stays out of scope. Export buttons
  * (Excel/PDF/PNG) ported in Phase 7 — see `exportUtils.ts`. */
-export function ScoutAnalyticsView({ fields, geoByCode, scoutData }: ScoutAnalyticsViewProps) {
+export function ScoutAnalyticsView({ fields, geoByCode, scoutData, onViewPlotsInCards }: ScoutAnalyticsViewProps) {
   const [groupKey, setGroupKey] = useState<ScoutGroupKey>('division')
   const [view, setView] = useState<ScoutView>('status')
   const [metric, setMetric] = useState<ScoutMetric>('count')
@@ -193,7 +194,15 @@ export function ScoutAnalyticsView({ fields, geoByCode, scoutData }: ScoutAnalyt
           No scout data found in the current filter for this view.
         </div>
       ) : (
-        <ScoutChart chartRef={chartRef} result={result} categories={categories} labels={labels} colors={colors} isPct={isPct} />
+        <ScoutChart
+          chartRef={chartRef}
+          result={result}
+          categories={categories}
+          labels={labels}
+          colors={colors}
+          isPct={isPct}
+          onViewPlotsInCards={onViewPlotsInCards}
+        />
       )}
     </div>
   )
@@ -206,6 +215,7 @@ function ScoutChart({
   labels,
   colors,
   isPct,
+  onViewPlotsInCards,
 }: {
   chartRef: RefObject<ChartInstance<'bar'> | null>
   result: GroupedResult
@@ -213,8 +223,9 @@ function ScoutChart({
   labels: Record<string, string>
   colors: Record<string, string>
   isPct: boolean
+  onViewPlotsInCards: (plotCodes: string[]) => void
 }) {
-  const { groupNames, buckets } = result
+  const { groupNames, buckets, plotCodesByGroupCategory } = result
 
   const valueFor = (group: string, category: string) => {
     const bucket = buckets[group]
@@ -246,13 +257,33 @@ function ScoutChart({
           indexAxis: 'y',
           responsive: true,
           maintainAspectRatio: false,
+          onClick: (_event, elements) => {
+            if (!elements.length) return
+            const { datasetIndex, index } = elements[0]
+            const category = categories[datasetIndex]
+            const group = groupNames[index]
+            const plotCodes = plotCodesByGroupCategory[group]?.[category] ?? []
+            if (plotCodes.length > 0) onViewPlotsInCards([...new Set(plotCodes)])
+          },
+          onHover: (event, elements) => {
+            const target = event.native?.target
+            if (target instanceof HTMLElement) target.style.cursor = elements.length ? 'pointer' : 'default'
+          },
           plugins: {
             legend: {
               position: 'top',
               labels: { font: { size: 11 }, boxWidth: 26, boxHeight: 4, generateLabels: lineStyleLegendLabels },
             },
             tooltip: {
-              callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed.x}${isPct ? '%' : ''}` },
+              callbacks: {
+                label: (item) => `${item.dataset.label}: ${item.parsed.x}${isPct ? '%' : ''}`,
+                afterLabel: (item) => {
+                  const category = categories[item.datasetIndex]
+                  const group = groupNames[item.dataIndex]
+                  const n = plotCodesByGroupCategory[group]?.[category]?.length ?? 0
+                  return n > 0 ? 'Click to view these plots in Field Cards' : ''
+                },
+              },
             },
           },
           scales: {

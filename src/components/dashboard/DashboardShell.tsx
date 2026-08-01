@@ -377,7 +377,12 @@ export function DashboardShell() {
                   )}
                   {activeTab === 'scoutAnalytics' &&
                     (scoutQuery.isSuccess ? (
-                      <ScoutAnalyticsView fields={filteredFields} geoByCode={geoByCode} scoutData={scoutQuery.data} />
+                      <ScoutAnalyticsView
+                        fields={filteredFields}
+                        geoByCode={geoByCode}
+                        scoutData={scoutQuery.data}
+                        onViewPlotsInCards={viewPlotsInCards}
+                      />
                     ) : (
                       <div className="p-10 text-center text-sm text-neutral-400">
                         {scoutQuery.isLoading ? (

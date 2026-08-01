@@ -60,6 +60,20 @@ export function scoutStatusForPlot(scoutData: ScoutData, plotCode: string): Scou
 export interface GroupedResult {
   groupNames: string[]
   buckets: Record<string, Record<string, number>>
+  /** Plot codes making up each (group, category) bar segment — lets the
+   * chart's click handler jump to Field Cards/Table filtered to exactly
+   * the plots behind whichever segment was clicked. */
+  plotCodesByGroupCategory: Record<string, Record<string, string[]>>
+}
+
+function addPlotCode(
+  plotCodesByGroupCategory: Record<string, Record<string, string[]>>,
+  group: string,
+  category: string,
+  plotCode: string,
+) {
+  const byCategory = (plotCodesByGroupCategory[group] ??= {})
+  ;(byCategory[category] ??= []).push(plotCode)
 }
 
 /** Ports `saRenderStatus()` (:7907-7931). */
@@ -70,15 +84,17 @@ export function computeScoutStatus(
   scoutData: ScoutData,
 ): GroupedResult {
   const buckets: Record<string, Record<string, number>> = {}
+  const plotCodesByGroupCategory: Record<string, Record<string, string[]>> = {}
   for (const field of fields) {
     const group = groupValueFor(field, geoByCode, groupKey)
     buckets[group] ??= { Unattended: 0, Scouted: 0, Overdue: 0, Closed: 0, total: 0 }
     const status = scoutStatusForPlot(scoutData, field.code)
     buckets[group][status]++
     buckets[group].total++
+    addPlotCode(plotCodesByGroupCategory, group, status, field.code)
   }
   const groupNames = sortGroupsByTotal(Object.keys(buckets), (g) => buckets[g]?.total ?? 0)
-  return { groupNames, buckets }
+  return { groupNames, buckets, plotCodesByGroupCategory }
 }
 
 /** Ports SA_CATEGORIES (:7704-7705) — Expect Yield deliberately excluded,
@@ -128,6 +144,7 @@ export function computeScoutReasons(
   scoutData: ScoutData,
 ): GroupedResult {
   const buckets: Record<string, Record<string, number>> = {}
+  const plotCodesByGroupCategory: Record<string, Record<string, string[]>> = {}
   for (const field of fields) {
     const latest = latestReport(scoutData, field.code)
     if (!latest) continue
@@ -135,12 +152,15 @@ export function computeScoutReasons(
     buckets[group] ??= Object.fromEntries(SCOUT_REASON_CATEGORIES.map((c) => [c, 0]))
     for (const cat of SCOUT_REASON_CATEGORIES) {
       const entry = latest.checklist[cat] as ChecklistEntry | undefined
-      if (isFlagged(entry)) buckets[group][cat]++
+      if (isFlagged(entry)) {
+        buckets[group][cat]++
+        addPlotCode(plotCodesByGroupCategory, group, cat, field.code)
+      }
     }
   }
   const totalFor = (g: string) => SCOUT_REASON_CATEGORIES.reduce((s, c) => s + (buckets[g]?.[c] ?? 0), 0)
   const groupNames = sortGroupsByTotal(Object.keys(buckets), totalFor)
-  return { groupNames, buckets }
+  return { groupNames, buckets, plotCodesByGroupCategory }
 }
 
 /** Ports SA_YIELD_BUCKETS/SA_YIELD_COLORS (:7709-7710). */
@@ -162,6 +182,7 @@ export function computeScoutYield(
   scoutData: ScoutData,
 ): GroupedResult {
   const buckets: Record<string, Record<string, number>> = {}
+  const plotCodesByGroupCategory: Record<string, Record<string, string[]>> = {}
   for (const field of fields) {
     const latest = latestReport(scoutData, field.code)
     if (!latest) continue
@@ -172,9 +193,10 @@ export function computeScoutYield(
     buckets[group] ??= Object.fromEntries(SCOUT_YIELD_BUCKETS.map((b) => [b, 0]))
     buckets[group][bucket]++
     buckets[group].total = (buckets[group].total ?? 0) + 1
+    addPlotCode(plotCodesByGroupCategory, group, bucket, field.code)
   }
   const groupNames = sortGroupsByTotal(Object.keys(buckets), (g) => buckets[g]?.total ?? 0)
-  return { groupNames, buckets }
+  return { groupNames, buckets, plotCodesByGroupCategory }
 }
 
 export const SCOUT_OUTCOMES = ['Improved', 'Same-Status', 'Still-Worst'] as const
@@ -211,6 +233,7 @@ export function computeScoutFollowup(
   }
 
   const buckets: Record<string, Record<string, number>> = {}
+  const plotCodesByGroupCategory: Record<string, Record<string, string[]>> = {}
   for (const followup of Object.values(scoutData.followupsByReportId)) {
     const plotCode = plotByReportId.get(followup.scoutReportId)
     if (!plotCode || !groupByPlot.has(plotCode)) continue
@@ -220,7 +243,8 @@ export function computeScoutFollowup(
     buckets[group] ??= { Improved: 0, 'Same-Status': 0, 'Still-Worst': 0, total: 0 }
     buckets[group][outcome]++
     buckets[group].total++
+    addPlotCode(plotCodesByGroupCategory, group, outcome, plotCode)
   }
   const groupNames = sortGroupsByTotal(Object.keys(buckets), (g) => buckets[g]?.total ?? 0)
-  return { groupNames, buckets }
+  return { groupNames, buckets, plotCodesByGroupCategory }
 }

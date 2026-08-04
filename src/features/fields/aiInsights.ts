@@ -89,6 +89,9 @@ export interface WeedSuspicionEntry {
   ndvi: number
   stageName: string
   excess: number
+  /** The field's latest scout visit's Weed checklist rating (NIL/Low/
+   * Moderate/Severe/Very Severe), or null if never scouted for weed. */
+  scoutWeedStatus: string | null
 }
 
 const WEED_EXCESS_THRESHOLD = 0.06
@@ -99,13 +102,15 @@ const WEED_EXCESS_THRESHOLD = 0.06
  * stage max by a lot there. */
 const WEED_MAX_AGE = 120
 
-/** A field's latest scout visit already rated Weed 'NIL' or 'Low' —
- * a human already looked and ruled it out, so the NDVI-only heuristic
- * shouldn't keep nagging about it. Per user request. */
-function scoutClearedWeed(scoutData: ScoutData, plotCode: string): boolean {
+/** The field's latest scout visit's Weed checklist rating, or null if
+ * never scouted for weed. Every NDVI-flagged field is listed regardless of
+ * this value — it used to suppress NIL/Low fields entirely, but per user
+ * request that suppression is revoked: show every flagged field with the
+ * scout's actual finding as a remark, rather than hiding some silently. */
+export function scoutWeedStatus(scoutData: ScoutData, plotCode: string): string | null {
   const report = latestReport(scoutData, plotCode)
   const entry = report?.checklist['Weed'] as ChecklistEntry | undefined
-  return entry?.status === 'NIL' || entry?.status === 'Low'
+  return entry?.status ?? null
 }
 
 export function computeWeedSuspicion(
@@ -122,8 +127,14 @@ export function computeWeedSuspicion(
     const sf = stageForAge(latest.age)
     if (!sf) continue
     const excess = Number((latest.ndvi - sf.stage.tMax).toFixed(3))
-    if (excess >= WEED_EXCESS_THRESHOLD && !scoutClearedWeed(scoutData, field.code)) {
-      out.push({ field, ndvi: latest.ndvi, stageName: sf.stage.name, excess })
+    if (excess >= WEED_EXCESS_THRESHOLD) {
+      out.push({
+        field,
+        ndvi: latest.ndvi,
+        stageName: sf.stage.name,
+        excess,
+        scoutWeedStatus: scoutWeedStatus(scoutData, field.code),
+      })
     }
   }
   return out.sort((a, b) => b.excess - a.excess)

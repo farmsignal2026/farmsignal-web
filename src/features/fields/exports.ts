@@ -1,4 +1,4 @@
-import { computePlantingDateSuspicion, computeWeedSuspicion } from './aiInsights'
+import { computePlantingDateSuspicion, computeWeedSuspicion, scoutWeedStatus as getScoutWeedStatus } from './aiInsights'
 import { HEALTH_LABEL } from './badgeStyles'
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
 import { areaFor } from './computeFieldStats'
@@ -104,12 +104,6 @@ export function buildSummaryReport(fields: Field[], geoByCode: Record<string, Fi
 // matches what the AI Insights tab shows.
 // ---------------------------------------------------------------------------
 
-function latestWeedRating(scoutData: ScoutData, plotCode: string): string {
-  const report = latestReport(scoutData, plotCode)
-  const entry = report?.checklist['Weed'] as ChecklistEntry | undefined
-  return entry?.status ?? ''
-}
-
 export function buildSuspicionReport(
   fields: Field[],
   geoByCode: Record<string, FieldGeo>,
@@ -136,7 +130,7 @@ export function buildSuspicionReport(
       ...commonCols(w.field, geoByCode[w.field.code]),
       'Suspicion Type': 'Weed',
       Reason: `+${w.excess.toFixed(2)} above ${w.stageName} max`,
-      'Scout Weed Rating': latestWeedRating(scoutData, w.field.code),
+      'Scout Weed Rating': getScoutWeedStatus(scoutData, w.field.code) ?? '',
     })
   }
   for (const p of computePlantingDateSuspicion(fields, geoByCode)) {
@@ -144,7 +138,7 @@ export function buildSuspicionReport(
       ...commonCols(p.field, geoByCode[p.field.code]),
       'Suspicion Type': 'Planting Date',
       Reason: p.note,
-      'Scout Weed Rating': latestWeedRating(scoutData, p.field.code),
+      'Scout Weed Rating': getScoutWeedStatus(scoutData, p.field.code) ?? '',
     })
   }
 

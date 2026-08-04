@@ -338,7 +338,7 @@ function SuspicionSection({
     () =>
       weedSuspicion.map((w) => ({
         field: w.field,
-        detail: `NDVI ${w.ndvi.toFixed(2)} — ${(w.excess >= 0 ? '+' : '')}${w.excess.toFixed(2)} above ${w.stageName} max, canopy not yet closed · Scouted Weed: ${w.scoutWeedStatus ?? 'not yet scouted'}`,
+        detail: `NDVI ${w.ndvi.toFixed(2)} — ${(w.excess >= 0 ? '+' : '')}${w.excess.toFixed(2)} above ${w.stageName} max · ${w.scoutWeedStatus !== null ? `Scouted Weed: ${w.scoutWeedStatus}` : 'Scout: Weed, not yet scouted'}`,
       })),
     [weedSuspicion],
   )

@@ -10,6 +10,7 @@ export interface SidebarFilters {
   client: string
   factory: string
   division: string
+  section: string
   village: string
   plot: string
   /** Multiple plot codes selected elsewhere (e.g. Health Summary's
@@ -35,6 +36,7 @@ export const EMPTY_FILTERS: SidebarFilters = {
   client: '',
   factory: '',
   division: '',
+  section: '',
   village: '',
   plot: '',
   plots: [],
@@ -80,9 +82,15 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewAc
   )
   const divisions = useMemo(() => uniqueSorted(divisionScoped.map((f) => f.division)), [divisionScoped])
 
-  const villageScoped = useMemo(
+  const sectionScoped = useMemo(
     () => divisionScoped.filter((f) => !filters.division || f.division === filters.division),
     [divisionScoped, filters.division],
+  )
+  const sections = useMemo(() => uniqueSorted(sectionScoped.map((f) => f.section)), [sectionScoped])
+
+  const villageScoped = useMemo(
+    () => sectionScoped.filter((f) => !filters.section || f.section === filters.section),
+    [sectionScoped, filters.section],
   )
   const villages = useMemo(() => uniqueSorted(villageScoped.map((f) => f.village)), [villageScoped])
 
@@ -149,13 +157,13 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewAc
             label="Client"
             value={filters.client}
             options={clients}
-            onChange={(v) => set({ client: v, factory: '', division: '', village: '', farmers: [], plot: '' })}
+            onChange={(v) => set({ client: v, factory: '', division: '', section: '', village: '', farmers: [], plot: '' })}
           />
           <FilterSelect
             label="Factory / Mill"
             value={filters.factory}
             options={factories}
-            onChange={(v) => set({ factory: v, division: '', village: '', farmers: [], plot: '' })}
+            onChange={(v) => set({ factory: v, division: '', section: '', village: '', farmers: [], plot: '' })}
           />
           <MultiSelectDropdown
             label="Plant Season"
@@ -168,7 +176,13 @@ export function Sidebar({ fields, filters, onChange, onOverviewClick, overviewAc
             label="Division"
             value={filters.division}
             options={divisions}
-            onChange={(v) => set({ division: v, village: '', farmers: [], plot: '' })}
+            onChange={(v) => set({ division: v, section: '', village: '', farmers: [], plot: '' })}
+          />
+          <FilterSelect
+            label="Section"
+            value={filters.section}
+            options={sections}
+            onChange={(v) => set({ section: v, village: '', farmers: [], plot: '' })}
           />
           <FilterSelect
             label="Village"

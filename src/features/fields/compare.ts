@@ -5,12 +5,13 @@ import { orderPlotTypes } from './plotTypeStyle'
 import { seasonLabelForYear, seasonStartYearFor } from './season'
 import type { Field, FieldGeo } from './types'
 
-export type CompareGroupKey = 'client' | 'factory' | 'division' | 'farmer' | 'plotType' | 'stage' | 'variety'
+export type CompareGroupKey = 'client' | 'factory' | 'division' | 'section' | 'farmer' | 'plotType' | 'stage' | 'variety'
 
 export const COMPARE_GROUP_LABEL: Record<CompareGroupKey, string> = {
   client: 'Client',
   factory: 'Factory / Mill',
   division: 'Division',
+  section: 'Section',
   farmer: 'Farmer',
   plotType: 'Crop Type',
   stage: 'Crop stage',
@@ -36,6 +37,8 @@ export function groupValueFor(field: Field, geoByCode: Record<string, FieldGeo>,
       return field.factory || 'Unknown'
     case 'division':
       return field.division || 'Unknown'
+    case 'section':
+      return field.section || 'Unknown'
     case 'farmer':
       return field.name || 'Unknown'
     case 'plotType':

@@ -138,6 +138,9 @@ export function DashboardShell() {
       case 'division':
         setFilters({ ...EMPTY_FILTERS, division: groupValue })
         break
+      case 'section':
+        setFilters({ ...EMPTY_FILTERS, section: groupValue })
+        break
       case 'farmer':
         setFilters({ ...EMPTY_FILTERS, farmers: [groupValue] })
         break

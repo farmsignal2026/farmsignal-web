@@ -18,6 +18,7 @@ export function filterFields(
   if (filters.client) result = result.filter((f) => f.clientCode === filters.client)
   if (filters.factory) result = result.filter((f) => f.factory === filters.factory)
   if (filters.division) result = result.filter((f) => f.division === filters.division)
+  if (filters.section) result = result.filter((f) => f.section === filters.section)
   if (filters.village) result = result.filter((f) => f.village === filters.village)
   if (filters.farmers.length > 0) result = result.filter((f) => filters.farmers.includes(f.name))
   if (filters.plot) result = result.filter((f) => f.code === filters.plot)

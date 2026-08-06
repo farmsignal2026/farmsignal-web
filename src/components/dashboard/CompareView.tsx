@@ -25,7 +25,7 @@ interface CompareViewProps {
 
 type ViewAs = 'count' | 'pct' | 'matrix' | 'yoy'
 
-const GROUP_KEYS: CompareGroupKey[] = ['client', 'factory', 'division', 'farmer', 'plotType', 'stage', 'variety']
+const GROUP_KEYS: CompareGroupKey[] = ['client', 'factory', 'division', 'section', 'farmer', 'plotType', 'stage', 'variety']
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)

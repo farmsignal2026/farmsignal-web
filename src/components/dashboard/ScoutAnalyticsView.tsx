@@ -42,7 +42,7 @@ interface ScoutAnalyticsViewProps {
   onStateChange: (patch: Partial<ScoutAnalyticsState>) => void
 }
 
-const GROUP_KEYS: ScoutGroupKey[] = ['client', 'factory', 'division', 'farmer', 'plotType', 'stage', 'variety']
+const GROUP_KEYS: ScoutGroupKey[] = ['client', 'factory', 'division', 'section', 'farmer', 'plotType', 'stage', 'variety']
 
 const VIEW_LABEL: Record<ScoutView, string> = {
   status: 'Scout Status',

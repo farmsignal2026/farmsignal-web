@@ -5,8 +5,11 @@ import { usePhotos } from '../../features/photos/usePhotos'
 import { useScoutData } from '../../features/scout/useScoutData'
 import { recommendationGiven, type ScoutFollowup, type ScoutReport } from '../../features/scout/types'
 import { SuspicionAlerts } from './FieldCardsView'
-import { NdviMapHistory } from './NdviMapHistory'
+import { MetricToggle, type Metric } from './MetricToggle'
+import { NdmiRampLegend } from './NdmiRampLegend'
+import { NdviRampLegend } from './NdviRampLegend'
 import { NdviTrendSection } from './NdviTrendSection'
+import { SatelliteMapViewer } from './SatelliteMapViewer'
 import { PhotoGrid } from './PhotoGrid'
 import { ScoutChecklistView, scoutReportRemarksLines } from './ScoutChecklistView'
 
@@ -38,6 +41,7 @@ export function FieldDetailModal({
 }: FieldDetailModalProps) {
   const scoutQuery = useScoutData()
   const photosQuery = usePhotos(field.code, 'geotag')
+  const [mapMetric, setMapMetric] = useState<Metric>('ndvi')
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -97,9 +101,15 @@ export function FieldDetailModal({
             </button>
           </Section>
 
-          {geo && geo.history.some((h) => h.pngUrl !== null) && (
+          {geo && geo.pngDate && (
             <Section title="Satellite Map">
-              <NdviMapHistory history={geo.history} />
+              <div className="mb-2 flex justify-end">
+                <MetricToggle value={mapMetric} onChange={setMapMetric} />
+              </div>
+              <SatelliteMapViewer geo={geo} metric={mapMetric} />
+              <div className="mt-1.5">
+                {mapMetric === 'ndvi' ? <NdviRampLegend compact /> : <NdmiRampLegend compact />}
+              </div>
             </Section>
           )}
 

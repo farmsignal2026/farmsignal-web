@@ -15,12 +15,31 @@ import { PLOTTYPE_ORDER } from './plotTypeStyle'
  * + a `plot_seasons` row (current crop-cycle) + optionally a new `farmers`
  * row if Farmer Code doesn't already exist (Farmer Name required in that
  * case). GPS boundary survey and officer assignment stay separate,
- * existing flows — a new plot always starts `is_mapped: false`. */
+ * existing flows — a new plot always starts `is_mapped: false`.
+ *
+ * "Previous Plot No" column (added 2026-08-09, template-only prep for the
+ * 2026-27 season rollover expected ~October — nothing about live import
+ * BEHAVIOR changes yet): the client will assign each existing plot a new
+ * plot_no every season but keep last season's plot_no in its own column —
+ * `plots.plot_no` needs to stay the SAME permanent identifier across
+ * seasons for YoY comparisons to keep working (everything in ndvi_trend/
+ * ndvi_raster/s1_observations/GeoJSON already keys off it), while the
+ * NEW season's number is what officers actually search/see, which
+ * belongs on its own `plot_seasons.plot_no` per season row — the schema
+ * already supports this shape (see migration_split_plot_seasons.sql,
+ * `plot_seasons` already has its own `plot_no` distinct from `plots.plot_no`).
+ * Currently a REJECTED validation error if filled in (see
+ * validateImportRows) — the actual rollover write path (match existing
+ * plot_id via this value, archive its old `plot_seasons` row, insert a new
+ * 'active' one) isn't built yet. This column exists now purely so the
+ * template/upload shape is already correct and won't need re-teaching to
+ * users when that logic ships. */
 
 export const CROP_TYPE_VALUES = ['BULK', 'PNUR', 'CNUR'] as const
 
 export const IMPORT_TEMPLATE_HEADERS = [
   'Plot No',
+  'Previous Plot No (only for a season rollover on an EXISTING plot — leave blank for a brand-new plot)',
   'Client Code',
   'Factory Code',
   'Division Code',
@@ -45,6 +64,7 @@ export const IMPORT_TEMPLATE_HEADERS = [
 
 export const IMPORT_TEMPLATE_EXAMPLE_ROW = [
   'EXAMPLE-PLOT-001',
+  '',
   'RSCL',
   'FAC01',
   'FAC01-DIV1',
@@ -71,6 +91,9 @@ export const IMPORT_TEMPLATE_EXAMPLE_ROW = [
  * every field a raw string (or '' if the cell was empty/missing). */
 export interface ImportRowInput {
   plotNo: string
+  /** Template-prep only, not yet acted on — see the module docstring.
+   * Always rejected with a clear error if non-blank (validateImportRows). */
+  previousPlotNo: string
   clientCode: string
   factoryCode: string
   divisionCode: string
@@ -284,6 +307,15 @@ export function validateImportRows(rows: ImportRowInput[], lookups: ImportLookup
     else if (lookups.existingPlotNos.has(plotNo)) errors.push('Plot No already exists')
     else if (seenInBatch.has(plotNo)) errors.push('Duplicate Plot No in this file')
     else seenInBatch.add(plotNo)
+
+    // Template-prep only (see module docstring) — the actual season
+    // rollover write path isn't built yet, so a filled-in value here would
+    // currently just create a disconnected duplicate "new" plot instead of
+    // renewing the real one. Rejected loudly rather than silently
+    // mishandled until that logic ships (expected ~October 2026).
+    if (row.previousPlotNo.trim()) {
+      errors.push('Previous Plot No: season rollover import isn\'t available yet — leave this blank for now')
+    }
 
     const clientCode = row.clientCode.trim()
     const factoryCode = row.factoryCode.trim()

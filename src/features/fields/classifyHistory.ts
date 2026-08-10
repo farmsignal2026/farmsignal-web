@@ -15,6 +15,9 @@ export interface ClassifiedObservation {
   /** True for S1/low-confidence readings — a pending/estimated point, not
    * yet a confirmed classification (HTML's "Unconfirmed" badge). */
   isUnconfirmed: boolean
+  /** NDMI for this same observation date, when the NDMI trial pipeline has
+   * a value for it — see NdviHistoryEntry.ndmi. */
+  ndmi: number | null
 }
 
 /** Turns one field's full NDVI history into classified per-observation rows
@@ -40,6 +43,7 @@ export function classifyHistory(field: Field, geo: FieldGeo | undefined): Classi
       isS1: h.isS1,
       isLowConfidence: h.isLowConfidence,
       isUnconfirmed: h.isS1 || h.isLowConfidence,
+      ndmi: h.ndmi,
     }
   })
 }

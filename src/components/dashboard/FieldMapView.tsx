@@ -6,41 +6,12 @@ import { HEALTH_COLOR_HEX } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
 import { FieldDetailModal } from './FieldDetailModal'
 import { FieldMapDetailPanel } from './FieldMapDetailPanel'
+import { NdviRampLegend } from './NdviRampLegend'
 
 const ZOOM_THRESHOLD = 16
 const RASTER_BUF_DEG = 0.0003
 const DEFAULT_CENTER: [number, number] = [10.875, 78.855]
 const DEFAULT_ZOOM = 13
-
-/** Exact same 20-level RYG ramp as NDVI_RAMP in RS_Cane_Monitoring_S1.html
- * (:4359) — if that script's ramp ever changes, this needs updating to
- * match, it's not derived from one shared source. Low (red) -> high
- * (green), each stop a fixed 0.05-wide NDVI band. */
-const NDVI_RAMP: [number, number, number][] = [
-  [139, 0, 0],
-  [180, 0, 0],
-  [210, 30, 0],
-  [230, 60, 0],
-  [240, 100, 0],
-  [245, 130, 0],
-  [245, 160, 0],
-  [240, 190, 0],
-  [225, 215, 0],
-  [195, 220, 0],
-  [160, 210, 10],
-  [120, 200, 15],
-  [75, 185, 20],
-  [45, 165, 18],
-  [25, 145, 15],
-  [15, 125, 12],
-  [8, 105, 10],
-  [5, 85, 8],
-  [3, 65, 5],
-  [1, 45, 3],
-]
-const NDVI_RAMP_CSS = `linear-gradient(to right, ${NDVI_RAMP.map(
-  ([r, g, b], i) => `rgb(${r},${g},${b}) ${((i / (NDVI_RAMP.length - 1)) * 100).toFixed(1)}%`,
-).join(', ')})`
 
 const ESRI_SATELLITE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 const CARTO_STREET_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
@@ -88,6 +59,11 @@ export function FieldMapView({ fields, geoByCode, focusPlotCode }: FieldMapViewP
   }, [fields, geoByCode])
 
   const selected = selectedCode ? mappedFields.find((m) => m.field.code === selectedCode) : undefined
+  // Whichever field to draw the highlight ring around — whatever's
+  // currently clicked/selected on the map takes priority over the field
+  // originally navigated to via "View on Map", so clicking around moves
+  // the ring instead of leaving it stuck on the original target.
+  const highlightedCode = selectedCode ?? focusPlotCode
 
   return (
     <div>
@@ -107,17 +83,8 @@ export function FieldMapView({ fields, geoByCode, focusPlotCode }: FieldMapViewP
         ))}
       </div>
 
-      <div className="mb-2 flex items-center gap-2 rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-2">
-        <span className="whitespace-nowrap text-[10px] font-semibold text-neutral-500">🎨 NDVI range:</span>
-        <div className="flex max-w-[320px] flex-1 flex-col gap-0.5">
-          <div className="h-3.5 rounded border border-neutral-200" style={{ background: NDVI_RAMP_CSS }} />
-          <div className="flex justify-between font-mono text-[9px] text-neutral-400">
-            {Array.from({ length: 11 }, (_, i) => (i / 10).toFixed(1)).map((v) => (
-              <span key={v}>{v}</span>
-            ))}
-          </div>
-        </div>
-        <span className="whitespace-nowrap text-[9px] text-neutral-400">(red=low → green=high)</span>
+      <div className="mb-2">
+        <NdviRampLegend />
       </div>
 
       <div className="relative" style={{ height: 560 }}>
@@ -141,25 +108,43 @@ export function FieldMapView({ fields, geoByCode, focusPlotCode }: FieldMapViewP
               <Marker
                 key={m.field.code}
                 position={m.centroid}
-                icon={healthDotIcon(m.field.healthStatus)}
+                icon={healthDotIcon(m.field.healthStatus, m.field.code === highlightedCode)}
                 eventHandlers={{ click: () => setSelectedCode(m.field.code) }}
               />
             ))}
 
+          {/* Highlighted polygon rendered LAST so its ring draws on top of
+             any overlapping neighbor — otherwise a field surrounded by
+             same-health neighbors was visually indistinguishable from them,
+             per explicit user feedback ("fields in surrounding, become
+             guess field"). Tracks `highlightedCode` (whichever field is
+             currently clicked/selected, falling back to the field Field
+             Card's "View on Map" navigated to) rather than staying pinned
+             to the original focusPlotCode forever — clicking a different
+             field on the map moves the ring, per follow-up feedback. */}
           {zoom >= ZOOM_THRESHOLD &&
-            mappedFields.map((m) => (
-              <Polygon
-                key={m.field.code}
-                positions={m.polygon}
-                pathOptions={{
-                  color: HEALTH_COLOR_HEX[m.field.healthStatus],
-                  weight: 2.5,
-                  fillColor: HEALTH_COLOR_HEX[m.field.healthStatus],
-                  fillOpacity: 0.15,
-                }}
-                eventHandlers={{ click: () => setSelectedCode(m.field.code) }}
-              />
-            ))}
+            [...mappedFields]
+              .sort((a, b) => (a.field.code === highlightedCode ? 1 : 0) - (b.field.code === highlightedCode ? 1 : 0))
+              .map((m) => {
+                const isFocused = m.field.code === highlightedCode
+                return (
+                  <Polygon
+                    key={m.field.code}
+                    positions={m.polygon}
+                    pathOptions={
+                      isFocused
+                        ? { color: '#facc15', weight: 5, fillColor: HEALTH_COLOR_HEX[m.field.healthStatus], fillOpacity: 0.25 }
+                        : {
+                            color: HEALTH_COLOR_HEX[m.field.healthStatus],
+                            weight: 2.5,
+                            fillColor: HEALTH_COLOR_HEX[m.field.healthStatus],
+                            fillOpacity: 0.15,
+                          }
+                    }
+                    eventHandlers={{ click: () => setSelectedCode(m.field.code) }}
+                  />
+                )
+              })}
 
           {zoom >= ZOOM_THRESHOLD &&
             mappedFields
@@ -238,8 +223,19 @@ function bufferedBounds(polygon: [number, number][]): [[number, number], [number
 /** Ports the source's L.circleMarker sizing (radius 5, i.e. 10px diameter,
  * :4664) — the earlier 16px DivIcon dwarfed the actual plot boundaries at
  * low zoom, per user feedback comparing against the HTML dashboard. */
-function healthDotIcon(status: keyof typeof HEALTH_COLOR_HEX): L.DivIcon {
+function healthDotIcon(status: keyof typeof HEALTH_COLOR_HEX, isFocused = false): L.DivIcon {
   const color = HEALTH_COLOR_HEX[status]
+  if (isFocused) {
+    // Same highlight color/idea as the focused Polygon's yellow ring — a
+    // wider halo ring around the normal dot, since a bigger dot alone
+    // still blends into a cluster of same-health neighbors at low zoom.
+    return L.divIcon({
+      className: '',
+      html: `<div style="width:20px;height:20px;border-radius:50%;background:#facc1540;border:2px solid #facc15;display:flex;align-items:center;justify-content:center"><div style="width:10px;height:10px;border-radius:50%;background:${color}D9;border:1px solid #374151"></div></div>`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    })
+  }
   return L.divIcon({
     className: '',
     html: `<div style="width:10px;height:10px;border-radius:50%;background:${color}D9;border:1px solid #374151"></div>`,

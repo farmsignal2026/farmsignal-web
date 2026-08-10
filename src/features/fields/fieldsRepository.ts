@@ -10,18 +10,40 @@ import {
   type HealthStatus,
   type NdviObservation,
 } from './growthStage'
-import type { Field, FieldGeo, FieldsLoadResult, NdviHistoryEntry, PixelDistribution, ScoutVisit, StagePoint } from './types'
+import type {
+  Field,
+  FieldGeo,
+  FieldsLoadResult,
+  NdviHistoryEntry,
+  PixelDistribution,
+  RasterHistoryEntry,
+  ScoutVisit,
+  StagePoint,
+} from './types'
 
 interface ObsRow {
   date: Date
   ndvi: number
   isLowConfidence: boolean
+  // ndvi_trend has no S1 rows at all (S1 estimates live in the separate
+  // s1_observations table, not queried here) — always false, same as this
+  // query's pre-split behavior (.eq('source','S2') already excluded every
+  // S1 row). Kept as a field rather than removed since growthStage.ts's
+  // spike-guard/streak functions and the trend chart's marker styling both
+  // branch on it.
   isS1: boolean
-  source: string
+  ndmi: number | null
+}
+
+interface RasterRow {
+  date: Date
+  ndvi: number | null
+  pngUrl: string | null
   pctGood: number
   pctModerate: number
   pctAttention: number
-  pngUrl: string | null
+  ndmi: number | null
+  ndmiPngUrl: string | null
 }
 
 function toClassificationInput(o: ObsRow): NdviObservation {
@@ -92,17 +114,33 @@ export class FieldsRepository {
     let from = 0
     while (true) {
       const { data: batch, error: obsErr } = await this.client
-        .from('ndvi_observations')
-        .select(
-          'plot_no,obs_date,ndvi_mean,obs_confidence,s1_confidence,source,pct_good,pct_moderate,pct_attention,raster_png_url',
-        )
-        .eq('source', 'S2')
+        .from('ndvi_trend')
+        .select('plot_no,obs_date,ndvi_mean,ndmi_mean,obs_confidence')
         .order('obs_date', { ascending: true })
         .range(from, from + 999)
       if (obsErr) throw obsErr
       allObs.push(...(batch ?? []))
       if (!batch || batch.length < 1000) break
       from += 1000
+    }
+
+    // Raster/pixel-classification history — a separate pipeline from the
+    // trend data above (its own schedule, its own dates), so this is a
+    // wholly independent query, not a column selection off the same rows
+    // the way it used to be before the ndvi_observations split (see
+    // NDVI_Data_Model_Split_Migration_Plan.docx).
+    const allRaster: Record<string, unknown>[] = []
+    let rasterFrom = 0
+    while (true) {
+      const { data: batch, error: rasterErr } = await this.client
+        .from('ndvi_raster')
+        .select('plot_no,capture_date,ndvi_mean,pct_good,pct_moderate,pct_attention,raster_png_url,ndmi_mean,ndmi_png_url')
+        .order('capture_date', { ascending: true })
+        .range(rasterFrom, rasterFrom + 999)
+      if (rasterErr) throw rasterErr
+      allRaster.push(...(batch ?? []))
+      if (!batch || batch.length < 1000) break
+      rasterFrom += 1000
     }
 
     const boundaryByPlot: Record<string, { polygon: [number, number][]; centroid: [number, number]; gpsAcre: number | null }> = {}
@@ -133,26 +171,59 @@ export class FieldsRepository {
     }
 
     const ndviByPlot: Record<string, ObsRow[]> = {}
+    // Independent of ndviByPlot on purpose — ndvi_trend_gee.py and
+    // ndmi_trend_gee.py are two separate GEE jobs, each binning its own S2
+    // image collection into its own 5-day windows, so a given row can have
+    // a real ndmi_mean with ndvi_mean left null (that window's NDVI job
+    // never committed a row for that exact date) or vice versa. Gating
+    // NDMI history on "this row also has a non-null ndvi_mean" (the
+    // original approach, reusing NdviHistoryEntry.ndmi via classifyHistory)
+    // silently hid every such row — confirmed real, 2026-08-09: 2 of 5
+    // plots found with genuine NDMI moisture stress were invisible to
+    // Scout Recommendations for exactly this reason (8000796387,
+    // 8000797866, both ndvi_mean=null on their stressed date).
+    const ndmiByPlot: Record<string, { date: Date; ndmi: number }[]> = {}
     for (const o of allObs) {
+      const pid = o.plot_no as string
+      const ndmiMean = o.ndmi_mean
+      if (ndmiMean != null) {
+        ;(ndmiByPlot[pid] ??= []).push({ date: new Date(o.obs_date as string), ndmi: Number(ndmiMean) })
+      }
       const ndviMean = o.ndvi_mean
       if (ndviMean == null) continue
-      const confLow = o.obs_confidence === 'low' || o.s1_confidence === 'low'
-      const source = (o.source as string | null) ?? 'S2'
-      const pid = o.plot_no as string
       ;(ndviByPlot[pid] ??= []).push({
         date: new Date(o.obs_date as string),
         ndvi: Number(ndviMean),
-        isLowConfidence: confLow,
-        isS1: source === 'S1',
-        source,
-        pctGood: Number(o.pct_good ?? 0),
-        pctModerate: Number(o.pct_moderate ?? 0),
-        pctAttention: Number(o.pct_attention ?? 0),
-        pngUrl: (o.raster_png_url as string | null) ?? null,
+        isLowConfidence: o.obs_confidence === 'low',
+        isS1: false,
+        ndmi: ndmiMean == null ? null : Number(ndmiMean),
       })
     }
     for (const key of Object.keys(ndviByPlot)) {
       ndviByPlot[key].sort((a, b) => a.date.getTime() - b.date.getTime())
+    }
+    for (const key of Object.keys(ndmiByPlot)) {
+      ndmiByPlot[key].sort((a, b) => a.date.getTime() - b.date.getTime())
+    }
+
+    const rasterByPlot: Record<string, RasterRow[]> = {}
+    for (const r of allRaster) {
+      const pid = r.plot_no as string
+      const ndviMean = r.ndvi_mean
+      const ndmiMean = r.ndmi_mean
+      ;(rasterByPlot[pid] ??= []).push({
+        date: new Date(r.capture_date as string),
+        ndvi: ndviMean == null ? null : Number(ndviMean),
+        pngUrl: (r.raster_png_url as string | null) ?? null,
+        pctGood: Number(r.pct_good ?? 0),
+        pctModerate: Number(r.pct_moderate ?? 0),
+        pctAttention: Number(r.pct_attention ?? 0),
+        ndmi: ndmiMean == null ? null : Number(ndmiMean),
+        ndmiPngUrl: (r.ndmi_png_url as string | null) ?? null,
+      })
+    }
+    for (const key of Object.keys(rasterByPlot)) {
+      rasterByPlot[key].sort((a, b) => a.date.getTime() - b.date.getTime())
     }
 
     // Scout visit history — needed for the needsScout grace period below.
@@ -202,17 +273,46 @@ export class FieldsRepository {
       let growthDays: number | null = null
       let thresholdMin: number | null = null
       let thresholdMax: number | null = null
-      let pixelDist: PixelDistribution = { good: 0, optimal: 0, attention: 0 }
       let stageData: StagePoint[] = []
-      let pngUrl: string | null = null
       let attentionStreak = 0
 
       const historyEntries: NdviHistoryEntry[] = history.map((h) => ({
         date: h.date,
         ndvi: h.ndvi,
-        pngUrl: h.pngUrl,
         isLowConfidence: h.isLowConfidence,
         isS1: h.isS1,
+        ndmi: h.ndmi,
+      }))
+      // Independent NDMI history (ndmiByPlot, not historyEntries) — see its
+      // own definition above for why: a real ndmi_mean can sit on a row
+      // whose ndvi_mean is null, which historyEntries would silently drop.
+      const ndmiHistory = ndmiByPlot[pid] ?? []
+      // Plain last-observation lookup — no spike-guard/stage classification
+      // (none of that logic applies to NDMI yet, thresholds aren't decided).
+      const latestNdmi: number | null = ndmiHistory.length > 0 ? ndmiHistory[ndmiHistory.length - 1].ndmi : null
+
+      // Raster/pixel-class data is independent of the trend/plantDate guard
+      // below — a plot can have real raster history even without a usable
+      // trend reading, and vice versa (two separate pipelines, see
+      // NDVI_Data_Model_Split_Migration_Plan.docx). "Latest" here means the
+      // most recent capture_date PERIOD, whether or not that specific date
+      // has a surviving image — never falls back to an older row just
+      // because it happens to have a picture attached.
+      const rasterRows = rasterByPlot[pid] ?? []
+      const latestRaster = rasterRows.length > 0 ? rasterRows[rasterRows.length - 1] : null
+      const pixelDist: PixelDistribution = latestRaster
+        ? { good: latestRaster.pctGood, optimal: latestRaster.pctModerate, attention: latestRaster.pctAttention }
+        : { good: 0, optimal: 0, attention: 0 }
+      const pngUrl: string | null = latestRaster?.pngUrl ?? null
+      const pngDate: Date | null = latestRaster?.date ?? null
+      const ndmiPngUrl: string | null = latestRaster?.ndmiPngUrl ?? null
+      const rasterHistory: RasterHistoryEntry[] = rasterRows.map((r) => ({
+        date: r.date,
+        ndvi: r.ndvi,
+        pngUrl: r.pngUrl,
+        pixelDist: { good: r.pctGood, optimal: r.pctModerate, attention: r.pctAttention },
+        ndmi: r.ndmi,
+        ndmiPngUrl: r.ndmiPngUrl,
       }))
 
       if (history.length > 0 && plantDate) {
@@ -283,16 +383,6 @@ export class FieldsRepository {
             needsScout = (healthStatus === 'attention' || healthStatus === 'serious') && !withinGracePeriod
           }
 
-          const latestWithPng = [...history].reverse().find((h) => h.pngUrl !== null) ?? history[history.length - 1]
-          pngUrl = latestWithPng.pngUrl
-
-          const latestPx =
-            [...history].reverse().find((h) => h.pctGood !== 0 || h.pctModerate !== 0 || h.pctAttention !== 0) ??
-            history[history.length - 1]
-          if (latestPx.pctGood !== 0 || latestPx.pctModerate !== 0 || latestPx.pctAttention !== 0) {
-            pixelDist = { good: latestPx.pctGood, optimal: latestPx.pctModerate, attention: latestPx.pctAttention }
-          }
-
           stageData = stages.map((s, i) => {
             const dMin = i === 0 ? 0 : stages[i - 1].cumEnd
             const dMax = s.cumEnd
@@ -353,8 +443,13 @@ export class FieldsRepository {
         pixelDist,
         stageData,
         pngUrl,
+        pngDate,
+        ndmi: latestNdmi,
+        ndmiPngUrl,
+        ndmiHistory,
         attentionStreak,
         history: historyEntries,
+        rasterHistory,
       })
     }
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Line } from 'react-chartjs-2'
 import '../../lib/chartSetup'
 import { classifyHistory, type ClassifiedObservation } from '../../features/fields/classifyHistory'
@@ -6,6 +6,7 @@ import { stageForAge, stages } from '../../features/fields/growthStage'
 import { HEALTH_COLOR_HEX, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
 import { buildStageBands, stageBandsPlugin } from '../../lib/stageBandsPlugin'
+import { MetricToggle, type Metric } from './MetricToggle'
 
 interface NdviTrendSectionProps {
   field: Field
@@ -33,6 +34,7 @@ function pointStyleFor(p: ClassifiedObservation): { style: 'triangle' | 'circle'
  * extracted from the old standalone NdviTrendModal so it can be embedded
  * as a section inside FieldDetailModal. */
 export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
+  const [metric, setMetric] = useState<Metric>('ndvi')
   const { points, activeStages, stats } = useMemo(() => {
     const rows = classifyHistory(field, geo)
     const activeStageNames = new Set<string>()
@@ -80,92 +82,175 @@ export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
 
   const stageBands = buildStageBands(activeStages)
 
+  const ndmiPoints = useMemo(() => points.filter((p) => p.ndmi != null), [points])
+
   if (points.length === 0) {
     return <div className="p-6 text-center text-sm text-neutral-400">No observation history for this plot.</div>
   }
 
   return (
     <div>
-      <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-        <StatTile label="Total obs" value={String(stats.total)} />
-        <StatTile label="Current stage" value={geo?.growthStage || 'N/A'} />
-        <StatTile
-          label="Latest NDVI"
-          value={geo?.ndvi != null ? geo.ndvi.toFixed(3) : '—'}
-          color={geo ? HEALTH_COLOR_HEX[geo.healthStatus] : undefined}
-          sub={geo ? HEALTH_LABEL[geo.healthStatus] : undefined}
-        />
-        <StatTile label="Good obs" value={String(stats.good)} color={HEALTH_COLOR_HEX.good} />
-        <StatTile label="Moderate" value={String(stats.moderate)} color={HEALTH_COLOR_HEX.optimal} />
-        <StatTile label="Need attention" value={String(stats.attention)} color={HEALTH_COLOR_HEX.attention} />
-      </div>
-      {stats.unconfirmed > 0 && (
-        <div className="mb-3 text-[10px] text-neutral-400">
-          {stats.unconfirmed} reading{stats.unconfirmed === 1 ? '' : 's'} not yet confirmed (S1 gap-fill or a sharp
-          drop awaiting the next pass) — see markers below, excluded from the counts above.
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-neutral-500">
+          {metric === 'ndvi' ? 'NDVI' : 'NDMI (moisture)'} trend
         </div>
+        <MetricToggle value={metric} onChange={setMetric} />
+      </div>
+
+      {metric === 'ndvi' ? (
+        <>
+          <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+            <StatTile label="Total obs" value={String(stats.total)} />
+            <StatTile label="Current stage" value={geo?.growthStage || 'N/A'} />
+            <StatTile
+              label="Latest NDVI"
+              value={geo?.ndvi != null ? geo.ndvi.toFixed(3) : '—'}
+              color={geo ? HEALTH_COLOR_HEX[geo.healthStatus] : undefined}
+              sub={geo ? HEALTH_LABEL[geo.healthStatus] : undefined}
+            />
+            <StatTile label="Good obs" value={String(stats.good)} color={HEALTH_COLOR_HEX.good} />
+            <StatTile label="Moderate" value={String(stats.moderate)} color={HEALTH_COLOR_HEX.optimal} />
+            <StatTile label="Need attention" value={String(stats.attention)} color={HEALTH_COLOR_HEX.attention} />
+          </div>
+          {stats.unconfirmed > 0 && (
+            <div className="mb-3 text-[10px] text-neutral-400">
+              {stats.unconfirmed} reading{stats.unconfirmed === 1 ? '' : 's'} not yet confirmed (S1 gap-fill or a sharp
+              drop awaiting the next pass) — see markers below, excluded from the counts above.
+            </div>
+          )}
+
+          <ChartLegend />
+          <div className="mb-2 text-[10px] text-neutral-400">
+            Dotted lines = stage threshold range · Point colour/shape = observation status
+          </div>
+
+          <div style={{ height: 320 }}>
+            <Line
+              data={{
+                datasets: [
+                  {
+                    label: field.code,
+                    data: points.map((p) => ({ x: p.age, y: Number(p.ndvi.toFixed(3)) })),
+                    borderColor: '#1D9E75',
+                    backgroundColor: '#1D9E7525',
+                    pointStyle: points.map((p) => pointStyleFor(p).style),
+                    pointBackgroundColor: points.map((p) => pointStyleFor(p).bg),
+                    pointBorderColor: points.map((p) => pointStyleFor(p).border),
+                    pointBorderWidth: points.map((p) => pointStyleFor(p).borderWidth),
+                    // A segment touching an S1/low-confidence point at either
+                    // end is drawn dashed rather than solid — the connecting
+                    // line itself is only as trustworthy as its shakiest
+                    // endpoint, same convention as the source HTML chart.
+                    segment: {
+                      borderDash: (ctx) => (points[ctx.p0DataIndex]?.isUnconfirmed || points[ctx.p1DataIndex]?.isUnconfirmed ? [4, 4] : undefined),
+                    },
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: false,
+                    borderWidth: 2,
+                  },
+                  ...thresholdDatasets,
+                ],
+              }}
+              plugins={[stageBandsPlugin]}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    filter: (item) => !String(item.dataset.label).startsWith('_t'),
+                    callbacks: {
+                      title: (items) => {
+                        const obsDate = points[items[0].dataIndex]?.date
+                        const dateStr = obsDate ? obsDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
+                        return `Day ${items[0].parsed.x}${dateStr ? ` · ${dateStr}` : ''}`
+                      },
+                      label: (item) => `NDVI ${(item.parsed.y as number).toFixed(3)}`,
+                    },
+                  },
+                  stageBands: { bands: stageBands },
+                },
+                scales: {
+                  x: {
+                    type: 'linear',
+                    title: { display: true, text: 'Crop age (days after planting)' },
+                    ticks: { stepSize: 30 },
+                  },
+                  y: { min: 0, max: 1, title: { display: true, text: 'NDVI' }, ticks: { stepSize: 0.1 } },
+                },
+              }}
+            />
+          </div>
+        </>
+      ) : ndmiPoints.length === 0 ? (
+        <div className="p-6 text-center text-sm text-neutral-400">
+          No NDMI data for this plot yet — the moisture-index trial hasn't covered it so far.
+        </div>
+      ) : (
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <StatTile label="NDMI readings" value={String(ndmiPoints.length)} />
+            <StatTile label="Latest NDMI" value={geo?.ndmi != null ? geo.ndmi.toFixed(3) : '—'} color="#0f766e" />
+            <StatTile
+              label="Range"
+              value={`${Math.min(...ndmiPoints.map((p) => p.ndmi!)).toFixed(2)} to ${Math.max(...ndmiPoints.map((p) => p.ndmi!)).toFixed(2)}`}
+            />
+          </div>
+          <div className="mb-2 text-[10px] text-neutral-400">
+            Raw NDMI (no Good/Moderate/Attention classification yet — thresholds not decided, see moisture-index
+            trial notes).
+          </div>
+
+          <div style={{ height: 320 }}>
+            <Line
+              data={{
+                datasets: [
+                  {
+                    label: `${field.code}-ndmi`,
+                    data: ndmiPoints.map((p) => ({ x: p.age, y: Number(p.ndmi!.toFixed(3)) })),
+                    borderColor: '#0f766e',
+                    backgroundColor: '#0f766e25',
+                    pointBackgroundColor: '#0f766e',
+                    pointBorderColor: '#0f766e',
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: false,
+                    borderWidth: 2,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    callbacks: {
+                      title: (items) => {
+                        const obsDate = ndmiPoints[items[0].dataIndex]?.date
+                        const dateStr = obsDate ? obsDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
+                        return `Day ${items[0].parsed.x}${dateStr ? ` · ${dateStr}` : ''}`
+                      },
+                      label: (item) => `NDMI ${(item.parsed.y as number).toFixed(3)}`,
+                    },
+                  },
+                },
+                scales: {
+                  x: {
+                    type: 'linear',
+                    title: { display: true, text: 'Crop age (days after planting)' },
+                    ticks: { stepSize: 30 },
+                  },
+                  y: { min: -0.5, max: 0.5, title: { display: true, text: 'NDMI' }, ticks: { stepSize: 0.25 } },
+                },
+              }}
+            />
+          </div>
+        </>
       )}
-
-      <ChartLegend />
-      <div className="mb-2 text-[10px] text-neutral-400">
-        Dotted lines = stage threshold range · Point colour/shape = observation status
-      </div>
-
-      <div style={{ height: 320 }}>
-        <Line
-          data={{
-            datasets: [
-              {
-                label: field.code,
-                data: points.map((p) => ({ x: p.age, y: Number(p.ndvi.toFixed(3)) })),
-                borderColor: '#1D9E75',
-                backgroundColor: '#1D9E7525',
-                pointStyle: points.map((p) => pointStyleFor(p).style),
-                pointBackgroundColor: points.map((p) => pointStyleFor(p).bg),
-                pointBorderColor: points.map((p) => pointStyleFor(p).border),
-                pointBorderWidth: points.map((p) => pointStyleFor(p).borderWidth),
-                // A segment touching an S1/low-confidence point at either
-                // end is drawn dashed rather than solid — the connecting
-                // line itself is only as trustworthy as its shakiest
-                // endpoint, same convention as the source HTML chart.
-                segment: {
-                  borderDash: (ctx) => (points[ctx.p0DataIndex]?.isUnconfirmed || points[ctx.p1DataIndex]?.isUnconfirmed ? [4, 4] : undefined),
-                },
-                tension: 0.3,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                fill: false,
-                borderWidth: 2,
-              },
-              ...thresholdDatasets,
-            ],
-          }}
-          plugins={[stageBandsPlugin]}
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                filter: (item) => !String(item.dataset.label).startsWith('_t'),
-                callbacks: {
-                  title: (items) => `Crop age: ${items[0].parsed.x} days`,
-                  label: (item) => `NDVI ${(item.parsed.y as number).toFixed(3)}`,
-                },
-              },
-              stageBands: { bands: stageBands },
-            },
-            scales: {
-              x: {
-                type: 'linear',
-                title: { display: true, text: 'Crop age (days after planting)' },
-                ticks: { stepSize: 30 },
-              },
-              y: { min: 0, max: 1, title: { display: true, text: 'NDVI' }, ticks: { stepSize: 0.1 } },
-            },
-          }}
-        />
-      </div>
     </div>
   )
 }

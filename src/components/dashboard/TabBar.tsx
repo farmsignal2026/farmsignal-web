@@ -18,7 +18,7 @@ export const TABS: { key: TabKey; label: string }[] = [
   { key: 'summary', label: '📈 Health Summary' },
   { key: 'cards', label: '🗂 Field cards' },
   { key: 'table', label: '📋 Table' },
-  { key: 'chart', label: 'NDVI Trend' },
+  { key: 'chart', label: 'Index Trend' },
   { key: 'map', label: '🗺️ Field Map' },
   { key: 'insights', label: '🔬 AI Insights' },
 ]

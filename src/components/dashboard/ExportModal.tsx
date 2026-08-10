@@ -3,7 +3,6 @@ import {
   buildDetailReport,
   buildScoutStatusReport,
   buildScoutVisitImpactReport,
-  buildSuspicionReport,
   buildSummaryReport,
 } from '../../features/fields/exports'
 import type { Field, FieldGeo } from '../../features/fields/types'
@@ -30,12 +29,14 @@ interface ReportDef {
 }
 
 /** Ports source's 6-report "⬇ Export Table CSV" sidebar section
- * (RS_Cane_Monitoring_S1.html:689-702), condensed to 5 per user direction
- * (#3 became a combined Weed+Planting-Date suspicion report reusing the
- * exact AI Insights heuristics; #5/#6 merged into one row-per-visit
- * report instead of two separate files) and switched from plain CSV to
- * real .xlsx via SheetJS so every numeric column stays a real number,
- * not quoted text — pivots straight into Excel without reformatting. */
+ * (RS_Cane_Monitoring_S1.html:689-702), condensed to 4 per user direction
+ * (#5/#6 merged into one row-per-visit report instead of two separate
+ * files) and switched from plain CSV to real .xlsx via SheetJS so every
+ * numeric column stays a real number, not quoted text — pivots straight
+ * into Excel without reformatting. The AI Insights tab's own 5 sections
+ * each get their own inline export button next to their "Select all"
+ * instead of living here — this modal got too crowded once they were
+ * added, per direct user feedback (2026-08-09). */
 export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }: ExportModalProps) {
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -58,15 +59,6 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
       build: () => buildSummaryReport(fields, geoByCode),
       filenamePrefix: 'current_health_status',
       sheetName: 'Current Health Status',
-    },
-    {
-      key: 'suspicion',
-      label: 'Suspicion report',
-      description: 'Weed + Planting Date suspicion, combined — same heuristics as the AI Insights tab.',
-      needsScout: true,
-      build: () => buildSuspicionReport(fields, geoByCode, scoutData!),
-      filenamePrefix: 'suspicion_report',
-      sheetName: 'Suspicion',
     },
     {
       key: 'scoutStatus',

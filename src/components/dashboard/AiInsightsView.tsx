@@ -13,6 +13,14 @@ import {
 } from '../../features/fields/aiInsights'
 import { areaFor } from '../../features/fields/computeFieldStats'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import {
+  buildChangeDetectionReport,
+  buildFarmerPerformanceReport,
+  buildScoutRecommendationReport,
+  buildSuspicionReport,
+  buildTopBottomPlotsReport,
+} from '../../features/fields/exports'
+import { downloadXLSX } from '../../lib/exportUtils'
 import type { ScoutData } from '../../features/scout/types'
 
 interface AiInsightsViewProps {
@@ -42,8 +50,8 @@ export function AiInsightsView({ fields, geoByCode, scoutData, onViewPlotsInCard
   const weedSuspicion = useMemo(() => computeWeedSuspicion(fields, geoByCode, scoutData), [fields, geoByCode, scoutData])
   const plantingSuspicion = useMemo(() => computePlantingDateSuspicion(fields, geoByCode), [fields, geoByCode])
   const scoutRecommendations = useMemo(
-    () => computeScoutRecommendation(fields, scoutData),
-    [fields, scoutData],
+    () => computeScoutRecommendation(fields, geoByCode, scoutData),
+    [fields, geoByCode, scoutData],
   )
   const plotScores = useMemo(() => computePlotScores(fields, geoByCode), [fields, geoByCode])
   const farmerPerformance = useMemo(
@@ -169,6 +177,7 @@ function SummaryCard({
   onToggle,
   children,
   onBackToTop,
+  headerAction,
 }: {
   id?: string
   title: string
@@ -178,6 +187,12 @@ function SummaryCard({
   onToggle: () => void
   children: ReactNode
   onBackToTop?: boolean
+  /** Section-level action (e.g. an export button) shown next to Back to
+   * Top — for sections with more than one sub-list (Suspicion, Top/Bottom
+   * Plots) or none at all (Change Detection), there's no single "Select
+   * all" row to anchor an inline export button to, so it lives here
+   * instead, still local to the section rather than a shared modal. */
+  headerAction?: ReactNode
 }) {
   return (
     <div id={id} className="rounded-lg border border-neutral-200 bg-white p-4">
@@ -189,7 +204,10 @@ function SummaryCard({
             <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-500">{count}</span>
           )}
         </button>
-        {onBackToTop && expanded && <BackToTop />}
+        <div className="flex shrink-0 items-center gap-2">
+          {headerAction && expanded && headerAction}
+          {onBackToTop && expanded && <BackToTop />}
+        </div>
       </div>
       {expanded && (
         <>
@@ -198,6 +216,41 @@ function SummaryCard({
         </>
       )}
     </div>
+  )
+}
+
+/** Small "⬇ Excel" button, deliberately duplicated inline near each
+ * section's own "Select all" (or, for multi-sub-list sections, the
+ * section header) rather than a single shared modal — per direct user
+ * feedback (2026-08-09): the previous "all AI Insights reports live in
+ * one Export modal" design got too crowded once these 5 were added. */
+function ExportXlsxButton({
+  onExport,
+  filenamePrefix,
+  sheetName,
+  label = 'Excel',
+}: {
+  onExport: () => Record<string, unknown>[]
+  filenamePrefix: string
+  sheetName: string
+  label?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const rows = onExport()
+        if (rows.length === 0) {
+          window.alert('No data to export.')
+          return
+        }
+        downloadXLSX(filenamePrefix, sheetName, rows)
+      }}
+      className="rounded-md border border-neutral-200 px-2 py-1 text-[10px] font-semibold text-neutral-500 hover:border-green-300 hover:text-green-700"
+      title="Export to Excel"
+    >
+      ⬇ {label}
+    </button>
   )
 }
 
@@ -218,11 +271,15 @@ function SelectionHeader({
   selected,
   onChange,
   onViewSelected,
+  exportButton,
 }: {
   codes: string[]
   selected: Set<string>
   onChange: (next: Set<string>) => void
   onViewSelected: () => void
+  /** Rendered next to "Select all" — per user request (2026-08-09), each
+   * AI Insights section's export lives here instead of a shared modal. */
+  exportButton?: ReactNode
 }) {
   if (codes.length === 0) return null
   const allSelected = codes.every((c) => selected.has(c))
@@ -237,15 +294,18 @@ function SelectionHeader({
         />
         Select all ({codes.length})
       </label>
-      {selected.size > 0 && (
-        <button
-          type="button"
-          onClick={onViewSelected}
-          className="rounded-md bg-green-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-green-700"
-        >
-          View {selected.size} in Field cards →
-        </button>
-      )}
+      <div className="flex items-center gap-2">
+        {exportButton}
+        {selected.size > 0 && (
+          <button
+            type="button"
+            onClick={onViewSelected}
+            className="rounded-md bg-green-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-green-700"
+          >
+            View {selected.size} in Field cards →
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -281,6 +341,13 @@ function ChangeDetectionSection({
       count={totalTracked}
       expanded={expanded}
       onToggle={onToggle}
+      headerAction={
+        <ExportXlsxButton
+          onExport={() => buildChangeDetectionReport(changeDetection)}
+          filenamePrefix="change_detection"
+          sheetName="Change Detection"
+        />
+      }
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {buckets.map((b) => {
@@ -356,6 +423,13 @@ function SuspicionSection({
       expanded={expanded}
       onToggle={onToggle}
       onBackToTop
+      headerAction={
+        <ExportXlsxButton
+          onExport={() => buildSuspicionReport(weedSuspicion, plantingSuspicion)}
+          filenamePrefix="suspicion_report"
+          sheetName="Suspicion"
+        />
+      }
     >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <SuspicionList
@@ -442,6 +516,8 @@ function SuspicionList({
 // 3. Scout Recommendations
 // ---------------------------------------------------------------------------
 
+const SCOUT_ROW_GRID = 'grid grid-cols-[1fr_150px_180px] items-center gap-2'
+
 function ScoutRecommendationSection({
   entries,
   onViewPlotsInCards,
@@ -460,7 +536,7 @@ function ScoutRecommendationSection({
     <SummaryCard
       id={SECTION_IDS.scout}
       title="Scout Recommendations"
-      subtitle="Need Attention / Need Serious Attention fields, with the specific flagged reason from their latest scout visit — not just the NDVI threshold label."
+      subtitle="Need Attention / Need Serious Attention fields (with the specific flagged reason from their latest scout visit), plus any field whose NDMI shows real post-Grand-Growth moisture stress even when NDVI still looks fine."
       count={entries.length}
       expanded={expanded}
       onToggle={onToggle}
@@ -471,42 +547,82 @@ function ScoutRecommendationSection({
         selected={selected}
         onChange={setSelected}
         onViewSelected={() => onViewPlotsInCards([...selected])}
+        exportButton={
+          <ExportXlsxButton
+            onExport={() => buildScoutRecommendationReport(entries)}
+            filenamePrefix="scout_recommendations"
+            sheetName="Scout Recommendations"
+          />
+        }
       />
       {entries.length === 0 ? (
         <div className="py-2 text-xs text-neutral-400">No fields currently need attention.</div>
       ) : (
-        <div className="divide-y divide-neutral-100">
-          {entries.map((entry) => (
-            <div key={entry.field.code} className="flex items-center gap-2 py-2 hover:bg-neutral-50">
-              <input
-                type="checkbox"
-                checked={selected.has(entry.field.code)}
-                onChange={() => toggle(entry.field.code)}
-                className="h-3.5 w-3.5 shrink-0 rounded border-neutral-300"
-                aria-label={`Select ${entry.field.name}`}
-              />
-              <button
-                type="button"
-                onClick={() => onViewPlotsInCards([entry.field.code])}
-                className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
-                title="Open this plot in Field cards"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-semibold text-neutral-700">
-                    {entry.field.name} <span className="font-normal text-neutral-400">· {entry.field.code}</span>
-                  </div>
-                  <div className="truncate text-[10px] text-neutral-400">{entry.reason}</div>
+        <div className="overflow-x-auto">
+          <div className={`min-w-[520px] ${SCOUT_ROW_GRID} border-b border-neutral-200 pb-1.5 text-[9px] font-semibold uppercase tracking-wide text-neutral-400`}>
+            <div className="pl-6">Plot</div>
+            <div>NDVI</div>
+            <div>NDMI</div>
+          </div>
+          <div className="min-w-[520px] divide-y divide-neutral-100">
+            {entries.map((entry) => (
+              <div key={entry.field.code} className={`${SCOUT_ROW_GRID} py-2 hover:bg-neutral-50`}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(entry.field.code)}
+                    onChange={() => toggle(entry.field.code)}
+                    className="h-3.5 w-3.5 shrink-0 rounded border-neutral-300"
+                    aria-label={`Select ${entry.field.name}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onViewPlotsInCards([entry.field.code])}
+                    className="min-w-0 flex-1 text-left"
+                    title="Open this plot in Field cards"
+                  >
+                    <div className="truncate text-xs font-semibold text-neutral-700">
+                      {entry.field.name} <span className="font-normal text-neutral-400">· {entry.field.code}</span>
+                    </div>
+                    <div className="truncate text-[10px] text-neutral-400">{entry.reason}</div>
+                  </button>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                    entry.severity === 'serious' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-amber-100 text-amber-800 border border-amber-100'
-                  }`}
-                >
-                  {entry.severity === 'serious' ? 'Serious' : 'Attention'}
-                </span>
-              </button>
-            </div>
-          ))}
+
+                <div>
+                  {entry.severity !== null ? (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                        entry.severity === 'serious' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-amber-100 text-amber-800 border border-amber-100'
+                      }`}
+                    >
+                      {entry.severity === 'serious' ? 'Serious' : 'Attention'}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-neutral-300">—</span>
+                  )}
+                </div>
+
+                <div>
+                  {entry.moistureStress ? (
+                    <span
+                      title={`Latest NDMI ${entry.moistureStress.ndmi.toFixed(2)}, ${entry.moistureStress.streak} consecutive stressed reading${entry.moistureStress.streak === 1 ? '' : 's'} past day 120`}
+                      className={`rounded-full px-2 py-0.5 text-[9px] font-bold border ${
+                        entry.moistureStress.level === 'drought-prone'
+                          ? 'bg-red-50 text-red-700 border-red-100'
+                          : entry.moistureStress.level === 'v-severe'
+                            ? 'bg-teal-100 text-teal-800 border-teal-200'
+                            : 'bg-teal-50 text-teal-700 border-teal-100'
+                      }`}
+                    >
+                      💧 {entry.moistureStress.label}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-neutral-300">—</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </SummaryCard>
@@ -543,6 +659,13 @@ function FarmerPerformanceSection({
       expanded={expanded}
       onToggle={onToggle}
       onBackToTop
+      headerAction={
+        <ExportXlsxButton
+          onExport={() => buildFarmerPerformanceReport(entries)}
+          filenamePrefix="farmer_performance"
+          sheetName="Farmer Performance"
+        />
+      }
     >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <FarmerRankList
@@ -695,6 +818,13 @@ function TopBottomPlotsSection({
       expanded={expanded}
       onToggle={onToggle}
       onBackToTop
+      headerAction={
+        <ExportXlsxButton
+          onExport={() => buildTopBottomPlotsReport(top, bottom)}
+          filenamePrefix="top_bottom_plots"
+          sheetName="Top Bottom Plots"
+        />
+      }
     >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <PlotScoreList title="Top 10" plots={top} selection={topSelection} onViewPlotsInCards={onViewPlotsInCards} />

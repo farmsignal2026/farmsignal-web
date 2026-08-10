@@ -45,13 +45,36 @@ export interface PixelDistribution {
   attention: number
 }
 
-/** One NDVI satellite pass for a plot, ascending order (oldest first). */
+/** One NDVI trend reading for a plot, ascending order (oldest first).
+ * Sourced from `ndvi_trend` — raster/pixel-class data lives separately now
+ * (see `RasterHistoryEntry`), not on this row. */
 export interface NdviHistoryEntry {
   date: Date
   ndvi: number
-  pngUrl: string | null
   isLowConfidence: boolean
   isS1: boolean
+  /** NDMI (moisture index) mean for this same date, when the NDMI trial
+   * pipeline has pushed a value for it — null for the vast majority of
+   * history (most clients/dates predate or aren't part of the NDMI trial),
+   * not an error. Lives on the same `ndvi_trend` row as `ndvi` itself. */
+  ndmi: number | null
+}
+
+/** One raster/pixel-classification capture for a plot, ascending order
+ * (oldest first). Sourced from `ndvi_raster` — an independent pipeline
+ * from `NdviHistoryEntry`'s trend dates, its own schedule (see
+ * NDVI_Data_Model_Split_Migration_Plan.docx). `pngUrl` is frequently
+ * null — most capture dates have real pixel-class stats but no surviving
+ * local image; that's expected, not an error. */
+export interface RasterHistoryEntry {
+  date: Date
+  ndvi: number | null
+  pngUrl: string | null
+  pixelDist: PixelDistribution
+  /** NDMI mean/image for this same capture — same "may be null" caveats as
+   * `NdviHistoryEntry.ndmi`, sourced from the same `ndvi_raster` row. */
+  ndmi: number | null
+  ndmiPngUrl: string | null
 }
 
 /** Parallel record to `Field`, keyed by plot code — geometry + NDVI
@@ -73,12 +96,36 @@ export interface FieldGeo {
   thresholdMax: number | null
   pixelDist: PixelDistribution
   stageData: StagePoint[]
+  /** Latest ndvi_raster row's image URL — null whenever no surviving local
+   * PNG exists for that date, which is common; `pngDate` still tells you
+   * WHEN the latest raster classification is from either way, so the UI
+   * can show "as of {pngDate}" even with no picture to show. */
   pngUrl: string | null
+  pngDate: Date | null
+  /** Latest NDMI trend reading (plain last-observation, no spike-guard/
+   * stage classification — none of that logic applies to NDMI yet, see
+   * farmsignal_ndmi_pipeline_plan memory) and latest raster NDMI image,
+   * sharing `pngDate` since both live on the same dated rows as their NDVI
+   * counterparts. Null for the vast majority of fields (NDMI trial is
+   * MEHTA-only so far). */
+  ndmi: number | null
+  ndmiPngUrl: string | null
+  /** Full NDMI trend history, independent of `history` — deliberately NOT
+   * gated on that same row having a non-null ndvi_mean (ndvi_trend_gee.py
+   * and ndmi_trend_gee.py are two separate GEE jobs with their own 5-day
+   * window binning, see fieldsRepository.ts's ndmiByPlot comment). Any
+   * code that needs "every real NDMI reading for this field" (e.g. the AI
+   * Insights moisture-stress check) should read this, not filter
+   * `history` for a non-null `.ndmi`. */
+  ndmiHistory: { date: Date; ndmi: number }[]
   /** Consecutive confirmed observations in 'attention', 0 if the field
    * isn't currently in attention/serious. Computed at load time (see
    * fieldsRepository.ts) rather than re-derived from raw history downstream. */
   attentionStreak: number
   history: NdviHistoryEntry[]
+  /** Full raster/pixel-class capture history, independent of `history`'s
+   * own trend dates — feeds the "browse previous NDVI maps" button. */
+  rasterHistory: RasterHistoryEntry[]
 }
 
 /** Minimal scout-visit record needed for the needsScout grace-period check. */

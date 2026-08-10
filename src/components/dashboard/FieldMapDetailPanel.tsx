@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import { HEALTH_BADGE_CLASS, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
 import { GrowthStageTimeline } from './GrowthStageTimeline'
-import { NdviMapHistory } from './NdviMapHistory'
+import { MetricToggle, type Metric } from './MetricToggle'
+import { NdmiRampLegend } from './NdmiRampLegend'
+import { NdviRampLegend } from './NdviRampLegend'
 import { NdviSparkline } from './NdviSparkline'
+import { SatelliteMapViewer } from './SatelliteMapViewer'
 
 interface FieldMapDetailPanelProps {
   field: Field
@@ -22,6 +26,7 @@ const WATCH_THRESHOLD = 0.1
 export function FieldMapDetailPanel({ field, geo, onClose, onOpenDetail }: FieldMapDetailPanelProps) {
   const hasPixelData = geo.pixelDist.good + geo.pixelDist.optimal + geo.pixelDist.attention > 0
   const drop = geo.prevNdvi != null && geo.ndvi != null ? Number((geo.prevNdvi - geo.ndvi).toFixed(2)) : null
+  const [mapMetric, setMapMetric] = useState<Metric>('ndvi')
 
   return (
     <div className="absolute inset-y-0 right-0 z-[1100] w-80 overflow-y-auto bg-white shadow-xl">
@@ -41,7 +46,21 @@ export function FieldMapDetailPanel({ field, geo, onClose, onOpenDetail }: Field
       </div>
 
       <div className="space-y-3 p-3">
-        <NdviMapHistory history={geo.history} />
+        {geo.pngDate ? (
+          <div>
+            <div className="mb-2 flex justify-end">
+              <MetricToggle value={mapMetric} onChange={setMapMetric} />
+            </div>
+            <SatelliteMapViewer geo={geo} metric={mapMetric} />
+            <div className="mt-1.5">
+              {mapMetric === 'ndvi' ? <NdviRampLegend compact /> : <NdmiRampLegend compact />}
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-24 items-center justify-center rounded-lg bg-[#F7F5F0] text-[11px] text-neutral-400">
+            No raster data for this plot yet
+          </div>
+        )}
 
         {drop !== null && drop >= WATCH_THRESHOLD && (
           <div className="rounded-md bg-red-50 px-2 py-1.5 text-[11px] font-semibold text-red-700">

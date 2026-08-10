@@ -2,7 +2,7 @@ import type { ScoutData } from '../scout/types'
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
 import { nearestObs } from './healthTrend'
 import { isFlagged, latestReport, SCOUT_REASON_CATEGORIES, type ChecklistEntry } from './scoutAnalytics'
-import { scoreForNdvi, stageForAge, stages, statusForNdvi } from './growthStage'
+import { scoreForNdvi, seriousStreakThreshold, stageForAge, stages, statusForNdvi } from './growthStage'
 import type { Field, FieldGeo } from './types'
 
 const DAY_MS = 86400000
@@ -237,12 +237,88 @@ export function computePlantingDateSuspicion(
 
 const FLAG_RANK: Record<string, number> = { Moderate: 1, Severe: 2, 'Very Severe': 3 }
 
+const MOISTURE_STRESS_GATE_DAYS = 120 // Tillering ends / Grand Growth starts (stages[2].cumEnd) — no
+                                       // moisture-stress read is attempted before this, per user decision
+                                       // (2026-08-09): the signal isn't meaningful on a young, not-yet-closed
+                                       // canopy.
+const V_SEVERE_NDMI_MAX = 0.0
+const SEVERE_NDMI_MAX = 0.15
+// Same value as seriousStreakThreshold (growthStage.ts) — same "3
+// consecutive bad readings escalates the label" idea already used for
+// NDVI attention→serious, reused here rather than inventing a second
+// threshold for the same shape of rule.
+const DROUGHT_PRONE_STREAK = seriousStreakThreshold
+
+export type MoistureStressLevel = 'v-severe' | 'severe' | 'drought-prone'
+
+export interface MoistureStressResult {
+  level: MoistureStressLevel
+  label: string
+  ndmi: number
+  streak: number
+}
+
+const MOISTURE_STRESS_LABEL: Record<MoistureStressLevel, string> = {
+  'v-severe': 'V. Severe moisture stress',
+  severe: 'Severe moisture stress',
+  'drought-prone': 'Drought prone',
+}
+
+/** Latest-reading moisture-stress read for one field, gated to
+ * Grand-Growth-onward (day > 120) per user decision (2026-08-09) — NDMI's
+ * relationship to real canopy moisture isn't considered meaningful before
+ * the canopy has closed. Escalates a persistent (3+ consecutive, at-or-
+ * after-gate) Severe/V.Severe run to "Drought prone" — the same
+ * single-observation-is-noise/multi-observation-is-signal reasoning as
+ * `computeAttentionStreak`, just applied to NDMI instead of NDVI, since a
+ * field reads as more genuinely at-risk on a sustained pattern than on
+ * one low reading. Returns null if there's no NDMI history past the gate,
+ * or the latest gated reading isn't stressed at all. */
+export function moistureStressForField(field: Field, geo: FieldGeo | undefined): MoistureStressResult | null {
+  if (!geo || !field.plantDateRaw) return null
+  // geo.ndmiHistory, NOT classifyHistory(field, geo) — the latter is built
+  // from NDVI-gated rows (fieldsRepository.ts's ndviByPlot loop drops any
+  // row with a null ndvi_mean), which silently hid real NDMI readings that
+  // happened to land on a date ndvi_trend_gee.py never committed an NDVI
+  // value for — confirmed real, 2026-08-09 (plots 8000796387, 8000797866).
+  const plantDate = field.plantDateRaw
+  const rows = geo.ndmiHistory
+    .map((h) => ({ ndmi: h.ndmi, age: Math.round((h.date.getTime() - plantDate.getTime()) / 86400000) }))
+    .filter((r) => r.age > MOISTURE_STRESS_GATE_DAYS)
+  if (rows.length === 0) return null
+
+  const latest = rows[rows.length - 1]
+  const latestNdmi = latest.ndmi
+  let level: MoistureStressLevel | null = null
+  if (latestNdmi <= V_SEVERE_NDMI_MAX) level = 'v-severe'
+  else if (latestNdmi <= SEVERE_NDMI_MAX) level = 'severe'
+  if (level === null) return null
+
+  let streak = 0
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const ndmi = rows[i].ndmi
+    if (ndmi <= SEVERE_NDMI_MAX) streak++
+    else break
+  }
+
+  return {
+    level: streak >= DROUGHT_PRONE_STREAK ? 'drought-prone' : level,
+    label: MOISTURE_STRESS_LABEL[streak >= DROUGHT_PRONE_STREAK ? 'drought-prone' : level],
+    ndmi: latestNdmi,
+    streak,
+  }
+}
+
 export interface ScoutRecommendationEntry {
   field: Field
-  severity: 'serious' | 'attention'
+  /** null for a field surfaced ONLY by NDMI moisture stress — it never
+   * crossed the NDVI attention/serious threshold, so there's no NDVI
+   * severity to show; see `moistureStress` instead. */
+  severity: 'serious' | 'attention' | null
   reason: string
   category: string | null
   flagStatus: string | null
+  moistureStress: MoistureStressResult | null
 }
 
 /** For every Need-Attention/Need-Serious-Attention field, surfaces the
@@ -250,15 +326,22 @@ export interface ScoutRecommendationEntry {
  * visit (reusing `isFlagged`/`SCOUT_REASON_CATEGORIES` from
  * scoutAnalytics.ts — same flag definition as Scout Reasons, not a second
  * copy) instead of just repeating the NDVI-threshold label the user
- * already sees on the field's own card. */
+ * already sees on the field's own card. ALSO surfaces fields whose NDVI
+ * looks fine (Good/Moderate) but whose NDMI shows real post-Grand-Growth
+ * moisture stress — per user decision (2026-08-09): "some moderate
+ * ndvi_class plots also NDMI class stress" is exactly the case NDVI-only
+ * scouting would silently miss. */
 export function computeScoutRecommendation(
   fields: Field[],
+  geoByCode: Record<string, FieldGeo>,
   scoutData: ScoutData,
 ): ScoutRecommendationEntry[] {
   const out: ScoutRecommendationEntry[] = []
 
   for (const field of fields) {
-    if (field.healthStatus !== 'attention' && field.healthStatus !== 'serious') continue
+    const ndviTriggered = field.healthStatus === 'attention' || field.healthStatus === 'serious'
+    const moistureStress = moistureStressForField(field, geoByCode[field.code])
+    if (!ndviTriggered && !moistureStress) continue
     const report = latestReport(scoutData, field.code)
 
     let reason: string
@@ -286,17 +369,28 @@ export function computeScoutRecommendation(
 
     out.push({
       field,
-      severity: field.healthStatus === 'serious' ? 'serious' : 'attention',
+      severity: ndviTriggered ? (field.healthStatus === 'serious' ? 'serious' : 'attention') : null,
       reason,
       category,
       flagStatus,
+      moistureStress,
     })
   }
 
-  return out.sort((a, b) => {
-    if (a.severity !== b.severity) return a.severity === 'serious' ? -1 : 1
-    return (FLAG_RANK[b.flagStatus ?? ''] ?? 0) - (FLAG_RANK[a.flagStatus ?? ''] ?? 0)
-  })
+  return out.sort((a, b) => severityRank(b) - severityRank(a) || (FLAG_RANK[b.flagStatus ?? ''] ?? 0) - (FLAG_RANK[a.flagStatus ?? ''] ?? 0))
+}
+
+const MOISTURE_LEVEL_RANK: Record<MoistureStressLevel, number> = { 'drought-prone': 2, 'v-severe': 1, severe: 0 }
+
+/** Combined ordering across both triggers — NDVI serious/attention always
+ * outranks an NDMI-only entry (NDVI crossing its own threshold is still
+ * the stronger, better-understood signal), then NDMI-only entries rank by
+ * how severe/persistent their moisture stress is. */
+function severityRank(entry: ScoutRecommendationEntry): number {
+  if (entry.severity === 'serious') return 10
+  if (entry.severity === 'attention') return 9
+  if (entry.moistureStress) return MOISTURE_LEVEL_RANK[entry.moistureStress.level]
+  return -1
 }
 
 // ---------------------------------------------------------------------------

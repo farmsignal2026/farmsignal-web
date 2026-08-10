@@ -10,6 +10,7 @@ import type { Field, FieldGeo } from '../../features/fields/types'
 import { downloadChartExcel, downloadChartPNG, printChartAsPDF } from '../../lib/exportUtils'
 import { buildStageBands, stageBandsPlugin } from '../../lib/stageBandsPlugin'
 import { ExportButtonRow } from './ExportButtonRow'
+import { MetricToggle, type Metric } from './MetricToggle'
 
 interface NdviTrendViewProps {
   fields: Field[]
@@ -40,6 +41,7 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
   const seasonModeEnabled = seasons.length >= 2
   const [groupBy, setGroupBy] = useState<GroupBy>('plotType')
   const bySeason = groupBy === 'season' && seasonModeEnabled
+  const [metric, setMetric] = useState<Metric>('ndvi')
 
   const { datasets, legend, activeStages, hasData } = useMemo(() => {
     const buckets: Record<string, Record<number, { sum: number; count: number }>> = {}
@@ -51,13 +53,21 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
       const rows = classifyHistory(field, geoByCode[field.code])
       for (const row of rows) {
         if (row.isS1) continue
+        const value = metric === 'ndvi' ? row.ndvi : row.ndmi
+        if (value == null) continue
         const b = Math.floor(row.age / AGE_BUCKET_DAYS)
         buckets[groupKey] ??= {}
         buckets[groupKey][b] ??= { sum: 0, count: 0 }
-        buckets[groupKey][b].sum += row.ndvi
+        buckets[groupKey][b].sum += value
         buckets[groupKey][b].count += 1
-        const sf = stageForAge(row.age)
-        if (sf) activeStageNames.add(sf.stage.name)
+        // Stage thresholds/bands are NDVI-specific (no NDMI thresholds
+        // decided yet) -- only collected in NDVI mode, so they naturally
+        // come out empty in NDMI mode instead of needing a separate guard
+        // everywhere they're used below.
+        if (metric === 'ndvi') {
+          const sf = stageForAge(row.age)
+          if (sf) activeStageNames.add(sf.stage.name)
+        }
       }
     }
 
@@ -106,7 +116,7 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
     const activeStages = stages.filter((s) => activeStageNames.has(s.name))
 
     return { datasets, legend, activeStages, hasData: orderedKeys.length > 0 }
-  }, [fields, geoByCode, hiddenKeys, bySeason])
+  }, [fields, geoByCode, hiddenKeys, bySeason, metric])
 
   const thresholdDatasets = useMemo(
     () =>
@@ -143,45 +153,54 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
   if (!hasData) {
     return (
       <div className="p-10 text-center text-sm text-neutral-400">
-        {bySeason ? 'No NDVI data available for the selected seasons.' : 'No Plot Type data available for the selected plots.'}
+        {bySeason
+          ? `No ${metric.toUpperCase()} data available for the selected seasons.`
+          : `No ${metric.toUpperCase()} Plot Type data available for the selected plots.`}
       </div>
     )
   }
 
   return (
     <div className="p-4">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold text-neutral-700">NDVI trend — age in days after planting</div>
+          <div className="text-sm font-semibold text-neutral-700">
+            {metric === 'ndvi' ? 'NDVI' : 'NDMI'} trend — age in days after planting
+          </div>
           <div className="text-xs text-neutral-400">
-            Dotted band = stage NDVI threshold · click a legend item to hide/show it
+            {metric === 'ndvi'
+              ? 'Dotted band = stage NDVI threshold · click a legend item to hide/show it'
+              : 'Raw NDMI, no stage thresholds yet · click a legend item to hide/show it'}
           </div>
         </div>
-        <div className="flex overflow-hidden rounded-md border border-neutral-200">
-          <button
-            type="button"
-            onClick={() => setGroupBy('plotType')}
-            className={`px-3 py-1.5 text-xs font-medium ${groupBy === 'plotType' ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
-          >
-            Plot Type
-          </button>
-          <button
-            type="button"
-            onClick={() => setGroupBy('season')}
-            disabled={!seasonModeEnabled}
-            title={!seasonModeEnabled ? 'Select 2+ seasons in the Plant Season filter (sidebar) to enable' : undefined}
-            className={`px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${groupBy === 'season' ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
-          >
-            Plant Season (YoY)
-          </button>
+        <div className="flex items-center gap-2">
+          <MetricToggle value={metric} onChange={setMetric} />
+          <div className="flex overflow-hidden rounded-md border border-neutral-200">
+            <button
+              type="button"
+              onClick={() => setGroupBy('plotType')}
+              className={`px-3 py-1.5 text-xs font-medium ${groupBy === 'plotType' ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+            >
+              Plot Type
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupBy('season')}
+              disabled={!seasonModeEnabled}
+              title={!seasonModeEnabled ? 'Select 2+ seasons in the Plant Season filter (sidebar) to enable' : undefined}
+              className={`px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${groupBy === 'season' ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+            >
+              Plant Season (YoY)
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="mb-3 flex justify-end">
         <ExportButtonRow
-          onPNG={() => downloadChartPNG(chartRef.current, 'NDVI_trend')}
-          onPDF={() => printChartAsPDF(chartRef.current, 'NDVI Trend')}
-          onExcel={() => downloadChartExcel(chartRef.current, 'NDVI_trend')}
+          onPNG={() => downloadChartPNG(chartRef.current, `${metric.toUpperCase()}_trend`)}
+          onPDF={() => printChartAsPDF(chartRef.current, `${metric.toUpperCase()} Trend`)}
+          onExcel={() => downloadChartExcel(chartRef.current, `${metric.toUpperCase()}_trend`)}
         />
       </div>
 
@@ -226,7 +245,7 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
                   title: (items) => `Crop age: ~${items[0].parsed.x} days`,
                   label: (item) => {
                     const raw = item.dataset.data[item.dataIndex] as unknown as { n: number }
-                    return `${item.dataset.label}: avg NDVI ${(item.parsed.y as number).toFixed(3)} (n=${raw.n} obs)`
+                    return `${item.dataset.label}: avg ${metric.toUpperCase()} ${(item.parsed.y as number).toFixed(3)} (n=${raw.n} obs)`
                   },
                 },
               },
@@ -238,12 +257,10 @@ export function NdviTrendView({ fields, geoByCode, seasons }: NdviTrendViewProps
                 title: { display: true, text: 'Crop age (days after planting)' },
                 ticks: { stepSize: 30 },
               },
-              y: {
-                min: 0,
-                max: 1,
-                title: { display: true, text: 'Average NDVI' },
-                ticks: { stepSize: 0.1 },
-              },
+              y:
+                metric === 'ndvi'
+                  ? { min: 0, max: 1, title: { display: true, text: 'Average NDVI' }, ticks: { stepSize: 0.1 } }
+                  : { min: -0.5, max: 0.5, title: { display: true, text: 'Average NDMI' }, ticks: { stepSize: 0.25 } },
             },
           }}
         />

@@ -1,4 +1,12 @@
-import { computePlantingDateSuspicion, computeWeedSuspicion, scoutWeedStatus as getScoutWeedStatus } from './aiInsights'
+import type {
+  ChangeDetectionEntry,
+  ChangeDetectionResult,
+  FarmerPerformanceEntry,
+  PlantingDateSuspicionEntry,
+  PlotScore,
+  ScoutRecommendationEntry,
+  WeedSuspicionEntry,
+} from './aiInsights'
 import { HEALTH_LABEL } from './badgeStyles'
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
 import { areaFor } from './computeFieldStats'
@@ -105,13 +113,12 @@ export function buildSummaryReport(fields: Field[], geoByCode: Record<string, Fi
 // ---------------------------------------------------------------------------
 
 export function buildSuspicionReport(
-  fields: Field[],
-  geoByCode: Record<string, FieldGeo>,
-  scoutData: ScoutData,
+  weedSuspicion: WeedSuspicionEntry[],
+  plantingSuspicion: PlantingDateSuspicionEntry[],
 ): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = []
 
-  const commonCols = (field: Field, geo: FieldGeo | undefined) => ({
+  const commonCols = (field: Field) => ({
     Farmer: field.name,
     Client: field.clientCode ?? '',
     'Factory/Mill': field.factory,
@@ -120,28 +127,122 @@ export function buildSuspicionReport(
     'Plot Code': field.code,
     Variety: field.variety,
     'Planting Date': field.plantDateRaw,
-    'Current Stage': geo?.growthStage ?? '',
-    'Latest NDVI': geo?.ndvi != null ? num(geo.ndvi) : '',
-    'Current Status': HEALTH_LABEL_SHORT[field.healthStatus] ?? field.healthStatus,
   })
 
-  for (const w of computeWeedSuspicion(fields, geoByCode, scoutData)) {
+  for (const w of weedSuspicion) {
     rows.push({
-      ...commonCols(w.field, geoByCode[w.field.code]),
+      ...commonCols(w.field),
       'Suspicion Type': 'Weed',
+      'Latest NDVI': num(w.ndvi),
       Reason: `+${w.excess.toFixed(2)} above ${w.stageName} max`,
-      'Scout Weed Rating': getScoutWeedStatus(scoutData, w.field.code) ?? '',
+      'Scout Weed Rating': w.scoutWeedStatus ?? '',
     })
   }
-  for (const p of computePlantingDateSuspicion(fields, geoByCode)) {
+  for (const p of plantingSuspicion) {
     rows.push({
-      ...commonCols(p.field, geoByCode[p.field.code]),
+      ...commonCols(p.field),
       'Suspicion Type': 'Planting Date',
+      'Latest NDVI': '',
       Reason: p.note,
-      'Scout Weed Rating': getScoutWeedStatus(scoutData, p.field.code) ?? '',
+      'Scout Weed Rating': '',
     })
   }
 
+  return rows
+}
+
+// ---------------------------------------------------------------------------
+// A3b-A3e. The remaining four AI Insights sections — each takes the SAME
+// pre-computed data its own section already renders from (not fields/
+// geoByCode/scoutData), so there's no second computation that could drift
+// from what's on screen, and each is callable directly from that section's
+// own inline export button with data it already has in hand.
+// ---------------------------------------------------------------------------
+
+export function buildScoutRecommendationReport(entries: ScoutRecommendationEntry[]): Record<string, unknown>[] {
+  return entries.map((e) => ({
+    Farmer: e.field.name,
+    Client: e.field.clientCode ?? '',
+    'Factory/Mill': e.field.factory,
+    Division: e.field.division,
+    Village: e.field.village,
+    'Plot Code': e.field.code,
+    'NDVI Flag': e.severity === 'serious' ? 'Serious' : e.severity === 'attention' ? 'Attention' : '',
+    'Scout Reason': e.reason,
+    'NDMI Flag': e.moistureStress?.label ?? '',
+    'Latest NDMI': e.moistureStress ? num(e.moistureStress.ndmi) : '',
+    'NDMI Consecutive Stressed Readings': e.moistureStress?.streak ?? '',
+  }))
+}
+
+export function buildChangeDetectionReport(result: ChangeDetectionResult): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = []
+  const buckets: [string, ChangeDetectionEntry[]][] = [
+    ['Improved', result.improved],
+    ['Unchanged', result.unchanged],
+    ['Deteriorated', result.deteriorated],
+  ]
+  for (const [label, entries] of buckets) {
+    for (const e of entries) {
+      rows.push({
+        Farmer: e.field.name,
+        Client: e.field.clientCode ?? '',
+        'Factory/Mill': e.field.factory,
+        Division: e.field.division,
+        Village: e.field.village,
+        'Plot Code': e.field.code,
+        Change: label,
+        'NDVI Delta (~15d)': num(e.delta),
+        'Latest NDVI': num(e.latestNdvi),
+        'Prior NDVI': num(e.priorNdvi),
+      })
+    }
+  }
+  return rows
+}
+
+export function buildFarmerPerformanceReport(performance: FarmerPerformanceEntry[]): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = []
+  performance.forEach((farmerEntry, i) => {
+    for (const plot of farmerEntry.plots) {
+      rows.push({
+        'Farmer Rank': i + 1,
+        Farmer: farmerEntry.farmer,
+        'Farmer Avg Score': num(farmerEntry.avgScore, 1),
+        'Farmer Scout Coverage %': num(farmerEntry.scoutCoveragePct, 1),
+        'Farmer Avg Trend (~15d)': num(farmerEntry.avgTrend),
+        'Plot Code': plot.field.code,
+        'Plot Client': plot.field.clientCode ?? '',
+        'Plot Factory/Mill': plot.field.factory,
+        'Plot Stage': plot.stageName,
+        'Plot Score': num(plot.score, 1),
+      })
+    }
+  })
+  return rows
+}
+
+export function buildTopBottomPlotsReport(top: PlotScore[], bottom: PlotScore[]): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = []
+  const buckets: [string, PlotScore[]][] = [
+    ['Top 10', top],
+    ['Bottom 10', bottom],
+  ]
+  for (const [label, entries] of buckets) {
+    entries.forEach((p, i) => {
+      rows.push({
+        Group: label,
+        Rank: i + 1,
+        Farmer: p.field.name,
+        Client: p.field.clientCode ?? '',
+        'Factory/Mill': p.field.factory,
+        Division: p.field.division,
+        'Plot Code': p.field.code,
+        Stage: p.stageName,
+        Score: num(p.score, 1),
+      })
+    })
+  }
   return rows
 }
 

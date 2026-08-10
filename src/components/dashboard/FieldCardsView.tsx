@@ -12,6 +12,9 @@ type SortDir = 'asc' | 'desc'
 interface FieldCardsViewProps {
   fields: Field[]
   geoByCode: Record<string, FieldGeo>
+  /** Sidebar's "SAR estimate" toggle — whether S1 gap-fill points show in
+   * the Field Detail popup's trend graph. Threaded down to FieldDetailModal. */
+  includeS1: boolean
   onViewOnMap: (plotCode: string) => void
   /** Plot codes currently flagged by AI Insights' Weed/Planting Date
    * suspicion heuristics (aiInsights.ts) — surfaced here too as a small
@@ -44,6 +47,7 @@ interface FieldCardsViewProps {
 export function FieldCardsView({
   fields,
   geoByCode,
+  includeS1,
   onViewOnMap,
   weedSuspicionCodes,
   plantingSuspicionNotes,
@@ -187,6 +191,7 @@ export function FieldCardsView({
         <FieldDetailModal
           field={detailField}
           geo={geoByCode[detailField.code]}
+          includeS1={includeS1}
           onClose={() => setDetailField(null)}
           onViewOnMap={() => onViewOnMap(detailField.code)}
           isWeedSuspicion={weedSuspicionCodes.has(detailField.code)}

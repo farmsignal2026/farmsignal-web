@@ -11,6 +11,7 @@ import { MetricToggle, type Metric } from './MetricToggle'
 interface NdviTrendSectionProps {
   field: Field
   geo: FieldGeo | undefined
+  includeS1: boolean
 }
 
 const S1_COLOR = '#f59e0b'
@@ -33,10 +34,10 @@ function pointStyleFor(p: ClassifiedObservation): { style: 'triangle' | 'circle'
  * chart mode (RS_Cane_Monitoring_S1.html:5400-5495) scoped to one plot,
  * extracted from the old standalone NdviTrendModal so it can be embedded
  * as a section inside FieldDetailModal. */
-export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
+export function NdviTrendSection({ field, geo, includeS1 }: NdviTrendSectionProps) {
   const [metric, setMetric] = useState<Metric>('ndvi')
   const { points, activeStages, stats } = useMemo(() => {
-    const rows = classifyHistory(field, geo)
+    const rows = classifyHistory(field, geo).filter((r) => includeS1 || !r.isS1)
     const activeStageNames = new Set<string>()
     let good = 0
     let moderate = 0
@@ -60,7 +61,7 @@ export function NdviTrendSection({ field, geo }: NdviTrendSectionProps) {
       activeStages: stages.filter((s) => activeStageNames.has(s.name)),
       stats: { total: rows.length, good, moderate, attention, unconfirmed },
     }
-  }, [field, geo])
+  }, [field, geo, includeS1])
 
   const thresholdDatasets = activeStages.flatMap((s, i) => {
     const dayMin = i === 0 ? 0 : activeStages[i - 1].cumEnd

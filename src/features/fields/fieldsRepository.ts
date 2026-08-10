@@ -143,6 +143,37 @@ export class FieldsRepository {
       rasterFrom += 1000
     }
 
+    // S1 (SAR) gap-fill estimates — display-only (see NdviHistoryEntry.isS1
+    // usage in NdviTrendSection.tsx: triangle marker, dashed connecting
+    // segments). Deliberately queried and merged SEPARATELY from
+    // ndviByPlot below, never fed into applySpikeGuardEscalation or any
+    // health/growth-stage computation — an S1 row is already a known
+    // lower-confidence estimate by definition, not a real optical
+    // reading to screen for sensor artifacts. Confirmed real gap
+    // (2026-08-10): this table was never queried at all before, despite
+    // the whole S1-triangle UI (legend, Sidebar's "SAR estimate" toggle)
+    // already existing and expecting it.
+    const allS1: Record<string, unknown>[] = []
+    let s1From = 0
+    while (true) {
+      const { data: batch, error: s1Err } = await this.client
+        .from('s1_observations')
+        .select('plot_no,obs_date,ndvi_mean')
+        .order('obs_date', { ascending: true })
+        .range(s1From, s1From + 999)
+      if (s1Err) throw s1Err
+      allS1.push(...(batch ?? []))
+      if (!batch || batch.length < 1000) break
+      s1From += 1000
+    }
+    const s1ByPlot: Record<string, { date: Date; ndvi: number }[]> = {}
+    for (const o of allS1) {
+      const ndviMean = o.ndvi_mean
+      if (ndviMean == null) continue
+      const pid = o.plot_no as string
+      ;(s1ByPlot[pid] ??= []).push({ date: new Date(o.obs_date as string), ndvi: Number(ndviMean) })
+    }
+
     const boundaryByPlot: Record<string, { polygon: [number, number][]; centroid: [number, number]; gpsAcre: number | null }> = {}
     const { data: bndData, error: bndErr } = await this.client.rpc('get_plot_boundaries')
     let boundariesFailed = false
@@ -276,13 +307,27 @@ export class FieldsRepository {
       let stageData: StagePoint[] = []
       let attentionStreak = 0
 
-      const historyEntries: NdviHistoryEntry[] = history.map((h) => ({
-        date: h.date,
-        ndvi: h.ndvi,
-        isLowConfidence: h.isLowConfidence,
-        isS1: h.isS1,
-        ndmi: h.ndmi,
+      // S1 rows are merged in HERE, for display only — historyEntries feeds
+      // the trend graph/sparkline (NdviTrendSection.tsx already has the
+      // triangle-marker/dashed-segment styling for isS1 rows, just never
+      // had any to render). `history` above (used for every health/growth-
+      // stage computation below) is untouched — an S1 estimate must never
+      // affect healthStatus/needsScout, per explicit user decision
+      // (2026-08-10): it's a display-only gap-fill visual, not a
+      // confirmed reading to classify on.
+      const s1Entries: NdviHistoryEntry[] = (s1ByPlot[pid] ?? []).map((s) => ({
+        date: s.date, ndvi: s.ndvi, isLowConfidence: false, isS1: true, ndmi: null,
       }))
+      const historyEntries: NdviHistoryEntry[] = [
+        ...history.map((h) => ({
+          date: h.date,
+          ndvi: h.ndvi,
+          isLowConfidence: h.isLowConfidence,
+          isS1: h.isS1,
+          ndmi: h.ndmi,
+        })),
+        ...s1Entries,
+      ].sort((a, b) => a.date.getTime() - b.date.getTime())
       // Independent NDMI history (ndmiByPlot, not historyEntries) — see its
       // own definition above for why: a real ndmi_mean can sit on a row
       // whose ndvi_mean is null, which historyEntries would silently drop.
@@ -425,7 +470,11 @@ export class FieldsRepository {
         healthStatus,
         farmerCode: farmer ? ((farmer.farmer_code as string | null) ?? '') : '',
         needsScout,
-        s1OnlyData: history.length > 0 && history.every((h) => h.isS1),
+        // historyEntries (S2+S1 merged), not `history` (S2-only, where
+        // isS1 was always false pre-2026-08-10 since S1 was never even
+        // queried) — this is genuinely true now for a field with ONLY S1
+        // gap-fill readings and no real S2 observation ever.
+        s1OnlyData: historyEntries.length > 0 && historyEntries.every((h) => h.isS1),
       })
 
       geoData.push({

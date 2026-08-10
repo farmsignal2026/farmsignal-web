@@ -433,6 +433,7 @@ export function DashboardShell() {
                     <FieldCardsView
                       fields={filteredFields}
                       geoByCode={geoByCode}
+                      includeS1={filters.includeS1}
                       onViewOnMap={viewPlotOnMap}
                       weedSuspicionCodes={weedSuspicionCodes}
                       plantingSuspicionNotes={plantingSuspicionNotes}
@@ -458,7 +459,7 @@ export function DashboardShell() {
                     <NdviTrendView fields={filteredFields} geoByCode={geoByCode} seasons={filters.seasons} />
                   )}
                   {activeTab === 'map' && (
-                    <FieldMapView fields={filteredFields} geoByCode={geoByCode} focusPlotCode={mapFocusPlot} />
+                    <FieldMapView fields={filteredFields} geoByCode={geoByCode} focusPlotCode={mapFocusPlot} includeS1={filters.includeS1} />
                   )}
                   {activeTab === 'insights' &&
                     (scoutQuery.isSuccess ? (

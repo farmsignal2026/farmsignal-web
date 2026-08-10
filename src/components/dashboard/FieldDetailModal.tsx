@@ -16,6 +16,7 @@ import { ScoutChecklistView, scoutReportRemarksLines } from './ScoutChecklistVie
 interface FieldDetailModalProps {
   field: Field
   geo: FieldGeo | undefined
+  includeS1: boolean
   onClose: () => void
   onViewOnMap: () => void
   isWeedSuspicion?: boolean
@@ -34,6 +35,7 @@ function formatDate(d: Date): string {
 export function FieldDetailModal({
   field,
   geo,
+  includeS1,
   onClose,
   onViewOnMap,
   isWeedSuspicion = false,
@@ -114,7 +116,7 @@ export function FieldDetailModal({
           )}
 
           <Section title="NDVI Trend">
-            <NdviTrendSection field={field} geo={geo} />
+            <NdviTrendSection field={field} geo={geo} includeS1={includeS1} />
           </Section>
 
           <Section title="Scout & Follow-up History">

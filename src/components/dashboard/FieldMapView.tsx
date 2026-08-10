@@ -31,6 +31,7 @@ interface FieldMapViewProps {
    * `focusPlotCode` handling (initial view only; the detail panel doesn't
    * auto-open, same as Flutter — the user still clicks the marker). */
   focusPlotCode?: string | null
+  includeS1: boolean
 }
 
 /** Field Map tab — react-leaflet, mirroring the already-verified Flutter
@@ -40,7 +41,7 @@ interface FieldMapViewProps {
  * detail panel. No Navigate button — not a fit for this desk-based
  * dashboard; Scout/photo history is one click away via the unified Field
  * Detail modal instead (see plan). */
-export function FieldMapView({ fields, geoByCode, focusPlotCode }: FieldMapViewProps) {
+export function FieldMapView({ fields, geoByCode, focusPlotCode, includeS1 }: FieldMapViewProps) {
   const [satellite, setSatellite] = useState(true)
   const focusGeo = focusPlotCode ? geoByCode[focusPlotCode] : undefined
   const [zoom, setZoom] = useState(focusGeo?.centroid ? 17 : DEFAULT_ZOOM)
@@ -184,6 +185,7 @@ export function FieldMapView({ fields, geoByCode, focusPlotCode }: FieldMapViewP
         <FieldDetailModal
           field={mappedFields.find((m) => m.field.code === detailCode)!.field}
           geo={geoByCode[detailCode]}
+          includeS1={includeS1}
           onClose={() => setDetailCode(null)}
           onViewOnMap={() => {
             /* already on Field Map — nothing extra to do */

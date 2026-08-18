@@ -74,3 +74,33 @@ body {
   color: var(--color-neutral-800);
   font-family: var(--font-sans);
 }
+
+/* "Print just this element" — classic visibility-based trick, scoped to
+   .print-area so it's a no-op everywhere except a view that opts in (used
+   by the Executive Report's PDF export so window.print() reuses the exact
+   same Tailwind-styled DOM already on screen, instead of re-serializing
+   into an unstyled popup window like the app's other PDF exports do).
+   `main`/the dashboard shell's scroll containers get their height/overflow
+   constraints lifted too, since without that only the on-screen scrolled
+   viewport would print instead of the full report. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  html,
+  body,
+  main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+}

@@ -47,8 +47,8 @@ export function OverviewView({ fields, geoByCode, scoutData, onViewGroupInCards 
   const health = useMemo(() => computeOverviewHealth(fields), [fields])
   const kpis = useMemo(() => computeScoutTrackingKPIs(fields, scoutData), [fields, scoutData])
   const statusResult = useMemo(
-    () => computeRelevantScoutStatus(scopedFields, scoutData, effectiveGroupKey),
-    [scopedFields, scoutData, effectiveGroupKey],
+    () => computeRelevantScoutStatus(scopedFields, geoByCode, scoutData, effectiveGroupKey),
+    [scopedFields, geoByCode, scoutData, effectiveGroupKey],
   )
   const reasonRows = useMemo(
     () => computeOverviewReasons(scopedFields, scoutData, effectiveGroupKey),

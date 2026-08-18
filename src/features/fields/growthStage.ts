@@ -89,6 +89,30 @@ export interface NdviObservation {
   isS1: boolean
 }
 
+/** True if `history` has any CONFIRMED (non-low-confidence, non-S1)
+ * reading dated strictly after `cutoff` that classifies as "attention" for
+ * its own age. Used to detect a genuinely NEW decline after a scout cycle
+ * closed — deliberately narrower than checking a plot's overall current
+ * `healthStatus`, which reflects whatever the latest confirmed reading is
+ * regardless of whether it predates the cutoff. Matches
+ * farmsignal_flutter's `hasNewAttentionAfter` (growth_stage.dart) 1:1 —
+ * confirmed as a real bug via live data on plot 8000785085, 2026-08-12:
+ * its latest confirmed reading predated its follow-up by 6 weeks
+ * (`crop_status='Same-Status'`, no decline at all); using overall current
+ * health status there would have incorrectly reopened a genuinely fine
+ * field as Unattended. */
+export function hasNewAttentionAfter(history: NdviObservation[], cutoff: Date, plantDate: Date): boolean {
+  for (const h of history) {
+    if (h.isLowConfidence || h.isS1) continue
+    if (h.date <= cutoff) continue
+    const age = Math.round((h.date.getTime() - plantDate.getTime()) / 86400000)
+    const sf = stageForAge(age)
+    if (!sf) continue
+    if (statusForNdvi(h.ndvi, sf.stage) === 'attention') return true
+  }
+  return false
+}
+
 /** How many consecutive CONFIRMED (non-low-confidence, non-S1) observations
  * a field has been in "attention", walking back from the latest reading.
  * 1-2 stays "Need Attention"; 3+ escalates to "Need Serious Attention". */

@@ -65,7 +65,7 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
       label: 'Division scout status',
       description: 'One row per plot — scout status, assigned officer, last visit date.',
       needsScout: true,
-      build: () => buildScoutStatusReport(fields, scoutData!, officers),
+      build: () => buildScoutStatusReport(fields, geoByCode, scoutData!, officers),
       filenamePrefix: 'division_scout_status',
       sheetName: 'Scout Status',
     },

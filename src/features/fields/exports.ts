@@ -252,6 +252,7 @@ export function buildTopBottomPlotsReport(top: PlotScore[], bottom: PlotScore[])
 
 export function buildScoutStatusReport(
   fields: Field[],
+  geoByCode: Record<string, FieldGeo>,
   scoutData: ScoutData,
   officers: Officer[],
 ): Record<string, unknown>[] {
@@ -266,7 +267,7 @@ export function buildScoutStatusReport(
         Division: field.division,
         'Client/Mill': field.clientCode ?? '',
         Farmer: field.name,
-        'Scout Status': scoutStatusForPlot(scoutData, field.code),
+        'Scout Status': scoutStatusForPlot(scoutData, field.code, geoByCode[field.code], field.plantDateRaw),
         Officer: officer?.name ?? (report ? 'Unknown' : ''),
         'Date of Scout': report?.visitDate ?? '',
       }

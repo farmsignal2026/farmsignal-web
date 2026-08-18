@@ -31,6 +31,7 @@ const FieldMapView = lazy(() => import('./FieldMapView').then((m) => ({ default:
 const HealthTrendView = lazy(() => import('./HealthTrendView').then((m) => ({ default: m.HealthTrendView })))
 const NdviTrendView = lazy(() => import('./NdviTrendView').then((m) => ({ default: m.NdviTrendView })))
 const ScoutAnalyticsView = lazy(() => import('./ScoutAnalyticsView').then((m) => ({ default: m.ScoutAnalyticsView })))
+const ExecutiveReportView = lazy(() => import('./ExecutiveReportView').then((m) => ({ default: m.ExecutiveReportView })))
 const ExportModal = lazy(() => import('./ExportModal').then((m) => ({ default: m.ExportModal })))
 const ImportFieldsModal = lazy(() => import('./ImportFieldsModal').then((m) => ({ default: m.ImportFieldsModal })))
 
@@ -487,6 +488,32 @@ export function DashboardShell() {
                         )}
                       </div>
                     ))}
+                  {activeTab === 'execReport' &&
+                    (scoutQuery.isSuccess ? (
+                      <ExecutiveReportView
+                        fields={sidebarFilteredFields}
+                        geoByCode={geoByCode}
+                        scoutData={scoutQuery.data}
+                        onViewPlotsInCards={viewPlotsInCards}
+                      />
+                    ) : (
+                      <div className="p-10 text-center text-sm text-neutral-400">
+                        {scoutQuery.isLoading ? (
+                          'Loading scout data…'
+                        ) : (
+                          <>
+                            Failed to load scout data.{' '}
+                            <button
+                              type="button"
+                              onClick={() => scoutQuery.refetch()}
+                              className="font-semibold text-green-700 hover:underline"
+                            >
+                              Retry
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
                   {activeTab !== 'overview' &&
                     activeTab !== 'trend' &&
                     activeTab !== 'compare' &&
@@ -496,7 +523,8 @@ export function DashboardShell() {
                     activeTab !== 'summary' &&
                     activeTab !== 'chart' &&
                     activeTab !== 'map' &&
-                    activeTab !== 'insights' && <TabPanel tab={activeTab} />}
+                    activeTab !== 'insights' &&
+                    activeTab !== 'execReport' && <TabPanel tab={activeTab} />}
                   </Suspense>
                 </div>
               </div>

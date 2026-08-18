@@ -102,11 +102,15 @@ export function computeScoutTrackingKPIs(fields: Field[], scoutData: ScoutData):
 
 export interface RelevantScoutStatusResult {
   groupNames: string[]
-  buckets: Record<string, { Unattended: number; Scouted: number; Overdue: number; Closed: number; total: number }>
+  buckets: Record<
+    string,
+    { Unattended: number; Scouted: number; Overdue: number; Closed: number; 'Watch Worst': number; total: number }
+  >
 }
 
 export function computeRelevantScoutStatus(
   fields: Field[],
+  geoByCode: Record<string, FieldGeo>,
   scoutData: ScoutData,
   groupKey: OverviewGroupKey,
 ): RelevantScoutStatusResult {
@@ -120,8 +124,8 @@ export function computeRelevantScoutStatus(
     if (!isRelevant) continue
 
     const group = overviewGroupValue(field, groupKey)
-    buckets[group] ??= { Unattended: 0, Scouted: 0, Overdue: 0, Closed: 0, total: 0 }
-    const status = scoutStatusForPlot(scoutData, field.code)
+    buckets[group] ??= { Unattended: 0, Scouted: 0, Overdue: 0, Closed: 0, 'Watch Worst': 0, total: 0 }
+    const status = scoutStatusForPlot(scoutData, field.code, geoByCode[field.code], field.plantDateRaw)
     buckets[group][status]++
     buckets[group].total++
   }

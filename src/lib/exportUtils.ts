@@ -79,6 +79,18 @@ export function printTableAsPDF(title: string, tableEl: HTMLElement | null) {
   openPrintWindow(title, tableEl.outerHTML)
 }
 
+/** Generic Blob-to-download-link trigger, shared by anything that builds
+ * its own file client-side (currently the Executive Report's .docx export)
+ * rather than going through `XLSX.writeFile()`'s own download path. */
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 /** Dumps a chart's labels/datasets to .xlsx — ports `exportChartExcel()`
  * (:6527-6541). */
 export function downloadChartExcel(chart: ChartInstance | null, filename: string) {

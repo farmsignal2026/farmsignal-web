@@ -9,6 +9,7 @@ export type TabKey =
   | 'chart'
   | 'map'
   | 'insights'
+  | 'execReport'
 
 export const TABS: { key: TabKey; label: string }[] = [
   { key: 'overview', label: '📊 Executive Summary' },
@@ -21,6 +22,7 @@ export const TABS: { key: TabKey; label: string }[] = [
   { key: 'chart', label: 'Index Trend' },
   { key: 'map', label: '🗺️ Field Map' },
   { key: 'insights', label: '🔬 AI Insights' },
+  { key: 'execReport', label: '📄 Executive Report' },
 ]
 
 interface TabBarProps {

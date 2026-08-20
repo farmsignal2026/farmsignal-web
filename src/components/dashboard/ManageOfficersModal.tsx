@@ -103,7 +103,7 @@ export function ManageOfficersModal({ onClose }: ManageOfficersModalProps) {
   const divisionNameByCode = useMemo(() => new Map(divisions.map((d) => [d.code, d.name])), [divisions])
 
   const visibleOfficers = useMemo(() => {
-    const filtered = officers.filter((o) => showInactive || o.isActive)
+    const filtered = officers.filter((o) => (showInactive ? !o.isActive : o.isActive))
     const key = (o: OfficerAdminRow) => {
       if (sortKey === 'role') return o.role ?? ''
       if (sortKey === 'client') return o.clientCode ?? ''
@@ -168,8 +168,8 @@ export function ManageOfficersModal({ onClose }: ManageOfficersModalProps) {
   return (
     <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-4xl rounded-lg bg-white shadow-xl"
-        style={{ maxHeight: '88vh' }}
+        className="w-full max-w-6xl rounded-lg bg-white shadow-xl"
+        style={{ maxHeight: '92vh' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-neutral-100 p-4">
@@ -182,7 +182,7 @@ export function ManageOfficersModal({ onClose }: ManageOfficersModalProps) {
           </button>
         </div>
 
-        <div className="space-y-3 overflow-y-auto p-4 text-sm" style={{ maxHeight: 'calc(88vh - 130px)' }}>
+        <div className="space-y-3 overflow-y-auto p-4 text-sm" style={{ maxHeight: 'calc(92vh - 130px)' }}>
           {loading && <div className="py-8 text-center text-xs text-neutral-400">Loading…</div>}
           {loadError && <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{loadError}</div>}
           {actionError && <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</div>}
@@ -192,7 +192,7 @@ export function ManageOfficersModal({ onClose }: ManageOfficersModalProps) {
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-1.5 text-[11px] text-neutral-500">
                   <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
-                  Show deactivated officers
+                  Show deactivated officers only
                 </label>
                 <label className="flex items-center gap-1.5 text-[11px] text-neutral-500">
                   Sort by
@@ -209,21 +209,24 @@ export function ManageOfficersModal({ onClose }: ManageOfficersModalProps) {
                 </label>
               </div>
 
-              <div className="overflow-x-auto rounded-md border border-neutral-200">
+              <div
+                className="overflow-auto rounded-md border border-neutral-200"
+                style={{ maxHeight: 'calc(92vh - 260px)' }}
+              >
                 <table className="w-full text-left text-[11px]">
-                  <thead className="bg-neutral-50 text-neutral-500">
+                  <thead className="text-neutral-500">
                     <tr>
-                      <th className="px-2 py-1.5 font-medium">Name</th>
-                      <th className="px-2 py-1.5 font-medium">Phone</th>
-                      <th className="px-2 py-1.5 font-medium">Email</th>
-                      <th className="px-2 py-1.5 font-medium">Role</th>
-                      <th className="px-2 py-1.5 font-medium">Client</th>
-                      <th className="px-2 py-1.5 font-medium">Factory</th>
-                      <th className="px-2 py-1.5 font-medium">Division</th>
-                      <th className="px-2 py-1.5 font-medium">Super Admin</th>
-                      <th className="px-2 py-1.5 font-medium">Exec Report</th>
-                      <th className="px-2 py-1.5 font-medium">Status</th>
-                      <th className="px-2 py-1.5 font-medium"></th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Name</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Phone</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Email</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Role</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Client</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Factory</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Division</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Super Admin</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Exec Report</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium">Status</th>
+                      <th className="sticky top-0 z-10 bg-neutral-50 px-2 py-1.5 font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../auth/useAuth'
 import { scopeFieldsForUser } from './fieldScoping'
 import { FieldsRepository } from './fieldsRepository'
+import { stages as DEFAULT_STAGES, type GrowthStage } from './growthStage'
 import type { Field, FieldGeo } from './types'
 
 const fieldsRepository = new FieldsRepository(supabase)
@@ -39,6 +40,19 @@ export function useScopedFields(): Field[] {
     if (!data || !user) return []
     return scopeFieldsForUser(data.fields, user)
   }, [data, user])
+}
+
+/** The same client/factory-resolved crop-stage thresholds
+ * `fieldsRepository.ts` used to compute `FieldGeo.healthStatus`/
+ * `growthStage`, exposed so UI components that independently recompute
+ * stage thresholds for their own display (e.g. the NDVI Trend chart's
+ * dashed threshold-range lines) resolve the SAME table instead of
+ * silently falling back to the hardcoded default. Falls back to a
+ * resolver that always returns the hardcoded `stages` while data hasn't
+ * loaded yet, so callers don't need a null-check before use. */
+export function useStageResolver(): (factoryCode: string, clientCode: string | null) => GrowthStage[] {
+  const { data } = useFieldsData()
+  return data?.stageResolver ?? (() => DEFAULT_STAGES)
 }
 
 /** Geo data for the role/division-scoped fields only — must mirror

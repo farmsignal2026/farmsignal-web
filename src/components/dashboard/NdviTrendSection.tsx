@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { Line } from 'react-chartjs-2'
 import '../../lib/chartSetup'
 import { classifyHistory, type ClassifiedObservation } from '../../features/fields/classifyHistory'
-import { stageForAge, stages } from '../../features/fields/growthStage'
+import { stageForAge } from '../../features/fields/growthStage'
 import { HEALTH_COLOR_HEX, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import { buildStageBands, stageBandsPlugin } from '../../lib/stageBandsPlugin'
 import { MetricToggle, type Metric } from './MetricToggle'
 
@@ -36,15 +37,20 @@ function pointStyleFor(p: ClassifiedObservation): { style: 'triangle' | 'circle'
  * as a section inside FieldDetailModal. */
 export function NdviTrendSection({ field, geo, includeS1 }: NdviTrendSectionProps) {
   const [metric, setMetric] = useState<Metric>('ndvi')
+  const stageResolver = useStageResolver()
+  const resolvedStages = useMemo(
+    () => stageResolver(field.factoryCode, field.clientCode),
+    [stageResolver, field.factoryCode, field.clientCode],
+  )
   const { points, activeStages, stats } = useMemo(() => {
-    const rows = classifyHistory(field, geo).filter((r) => includeS1 || !r.isS1)
+    const rows = classifyHistory(field, geo, resolvedStages).filter((r) => includeS1 || !r.isS1)
     const activeStageNames = new Set<string>()
     let good = 0
     let moderate = 0
     let attention = 0
     let unconfirmed = 0
     rows.forEach((r) => {
-      const sf = stageForAge(r.age)
+      const sf = stageForAge(r.age, resolvedStages)
       if (sf) activeStageNames.add(sf.stage.name)
       if (r.isUnconfirmed) {
         unconfirmed++
@@ -58,10 +64,10 @@ export function NdviTrendSection({ field, geo, includeS1 }: NdviTrendSectionProp
     })
     return {
       points: rows,
-      activeStages: stages.filter((s) => activeStageNames.has(s.name)),
+      activeStages: resolvedStages.filter((s) => activeStageNames.has(s.name)),
       stats: { total: rows.length, good, moderate, attention, unconfirmed },
     }
-  }, [field, geo, includeS1])
+  }, [field, geo, includeS1, resolvedStages])
 
   const thresholdDatasets = activeStages.flatMap((s, i) => {
     const dayMin = i === 0 ? 0 : activeStages[i - 1].cumEnd

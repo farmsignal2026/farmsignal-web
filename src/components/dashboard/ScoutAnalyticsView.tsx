@@ -25,6 +25,7 @@ import {
   type ScoutView,
 } from '../../features/fields/scoutAnalytics'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import type { ScoutData } from '../../features/scout/types'
 import '../../lib/chartSetup'
 import { lineStyleLegendLabels } from '../../lib/chartLegend'
@@ -78,11 +79,12 @@ export function ScoutAnalyticsView({
   const setMetric = (metric: ScoutMetric) => onStateChange({ metric })
   const setTop3Only = (top3Only: boolean) => onStateChange({ top3Only })
   const chartRef = useRef<ChartInstance<'bar'> | null>(null)
+  const stageResolver = useStageResolver()
 
   const result = useMemo<GroupedResult>(() => {
     switch (view) {
       case 'status':
-        return computeScoutStatus(fields, geoByCode, groupKey, scoutData)
+        return computeScoutStatus(fields, geoByCode, groupKey, scoutData, stageResolver)
       case 'reasons':
         return computeScoutReasons(fields, geoByCode, groupKey, scoutData)
       case 'yield':
@@ -90,7 +92,7 @@ export function ScoutAnalyticsView({
       case 'followup':
         return computeScoutFollowup(fields, geoByCode, groupKey, scoutData)
     }
-  }, [view, fields, geoByCode, groupKey, scoutData])
+  }, [view, fields, geoByCode, groupKey, scoutData, stageResolver])
 
   const { title, subtitle, categories, labels, colors } = useMemo(() => {
     switch (view) {

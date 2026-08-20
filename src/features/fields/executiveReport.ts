@@ -3,7 +3,9 @@ import { computePlotScores, topBottomPlots, type PlotScore } from './aiInsights'
 import { classifyHistory } from './classifyHistory'
 import { areaFor, computeFieldStats } from './computeFieldStats'
 import { computeHealthTrend, nearestObs, type HealthTrendResult } from './healthTrend'
-import { scoreForNdvi, stageForAge } from './growthStage'
+import { scoreForNdvi, stageForAge, stages, type GrowthStage } from './growthStage'
+
+type StageResolver = (factoryCode: string, clientCode: string | null) => GrowthStage[]
 import {
   computeScoutReasons,
   computeScoutStatus,
@@ -146,7 +148,12 @@ interface HistoricalSnapshot {
  * per snapshot point) — `FieldGeo.healthStatus`/`ndvi` only ever hold each
  * field's CURRENT state, so a genuine "two fortnights ago" comparison has
  * no other data source to read from. */
-function snapshotAsOf(fields: Field[], geoByCode: Record<string, FieldGeo>, targetDate: Date): HistoricalSnapshot {
+function snapshotAsOf(
+  fields: Field[],
+  geoByCode: Record<string, FieldGeo>,
+  targetDate: Date,
+  stageResolver: StageResolver,
+): HistoricalSnapshot {
   let good = 0
   let moderate = 0
   let attention = 0
@@ -155,7 +162,8 @@ function snapshotAsOf(fields: Field[], geoByCode: Record<string, FieldGeo>, targ
   for (const field of fields) {
     const geo = geoByCode[field.code]
     if (!geo) continue
-    const rows = classifyHistory(field, geo)
+    const fieldStages = stageResolver(field.factoryCode, field.clientCode)
+    const rows = classifyHistory(field, geo, fieldStages)
     const nearest = nearestObs(rows, targetDate, SNAPSHOT_WINDOW_DAYS)
     if (!nearest || nearest.status === 'unknown') continue
 
@@ -163,7 +171,7 @@ function snapshotAsOf(fields: Field[], geoByCode: Record<string, FieldGeo>, targ
     else if (nearest.status === 'optimal') moderate++
     else if (nearest.status === 'attention') attention++
 
-    const stageInfo = stageForAge(nearest.age)
+    const stageInfo = stageForAge(nearest.age, fieldStages)
     if (stageInfo) {
       const division = field.division || 'Unknown'
       const list = scoresByDivision.get(division) ?? []
@@ -205,10 +213,11 @@ function buildComparison(
   moderate: { count: number },
   attention: { count: number },
   divisionRanking: DivisionRankingEntry[],
+  stageResolver: StageResolver,
 ): FortnightComparison {
   const previousDate = new Date(trendEnd.getTime() - FORTNIGHT_DAYS * 86400000)
   const previousLabel = `Fortnight ending ${fmtDate(previousDate)}`
-  const previous = snapshotAsOf(fields, geoByCode, previousDate)
+  const previous = snapshotAsOf(fields, geoByCode, previousDate, stageResolver)
 
   const currentMonitored = good.count + moderate.count + attention.count
   const notComparable = currentMonitored === 0 || previous.monitored < currentMonitored * MIN_COMPARABLE_COVERAGE
@@ -321,6 +330,7 @@ export function computeExecutiveReport(
   scoutData: ScoutData,
   trendStart: Date,
   trendEnd: Date,
+  stageResolver: StageResolver = () => stages,
 ): ExecutiveReportData {
   const fields = allFields.filter((f) => f.factory === factory)
 
@@ -332,7 +342,7 @@ export function computeExecutiveReport(
     acres: stats.buckets.attention.acres + stats.buckets.serious.acres,
   }
 
-  const healthTrend = computeHealthTrend(fields, geoByCode, trendStart, trendEnd, 'health')
+  const healthTrend = computeHealthTrend(fields, geoByCode, trendStart, trendEnd, 'health', stageResolver)
 
   const scoutStatusCounts: Record<ScoutStatus, number> = {
     Unattended: 0,
@@ -341,7 +351,7 @@ export function computeExecutiveReport(
     Closed: 0,
     'Watch Worst': 0,
   }
-  const statusResult = computeScoutStatus(fields, geoByCode, 'division', scoutData)
+  const statusResult = computeScoutStatus(fields, geoByCode, 'division', scoutData, stageResolver)
   for (const group of statusResult.groupNames) {
     for (const status of SCOUT_STATUSES) {
       scoutStatusCounts[status] += statusResult.buckets[group]?.[status] ?? 0
@@ -377,7 +387,7 @@ export function computeExecutiveReport(
     topReasons,
     divisionRanking,
   )
-  const comparison = buildComparison(fields, geoByCode, trendEnd, good, moderate, attention, divisionRanking)
+  const comparison = buildComparison(fields, geoByCode, trendEnd, good, moderate, attention, divisionRanking, stageResolver)
 
   return {
     factory,

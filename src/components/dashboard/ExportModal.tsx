@@ -6,6 +6,7 @@ import {
   buildSummaryReport,
 } from '../../features/fields/exports'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import { downloadXLSX } from '../../lib/exportUtils'
 import type { Officer } from '../../features/officers/types'
 import type { ScoutData } from '../../features/scout/types'
@@ -40,6 +41,7 @@ interface ReportDef {
 export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }: ExportModalProps) {
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const stageResolver = useStageResolver()
 
   const reports: ReportDef[] = [
     {
@@ -47,7 +49,7 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
       label: 'NDVI Trend data',
       description: 'One row per confirmed satellite observation for every plot currently in view.',
       needsScout: false,
-      build: () => buildDetailReport(fields, geoByCode),
+      build: () => buildDetailReport(fields, geoByCode, stageResolver),
       filenamePrefix: 'ndvi_trend_data',
       sheetName: 'NDVI Trend Data',
     },
@@ -56,7 +58,7 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
       label: 'Current Health status',
       description: 'One row per plot — current status plus season min/max/avg NDVI and observation counts.',
       needsScout: false,
-      build: () => buildSummaryReport(fields, geoByCode),
+      build: () => buildSummaryReport(fields, geoByCode, stageResolver),
       filenamePrefix: 'current_health_status',
       sheetName: 'Current Health Status',
     },
@@ -65,7 +67,7 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
       label: 'Division scout status',
       description: 'One row per plot — scout status, assigned officer, last visit date.',
       needsScout: true,
-      build: () => buildScoutStatusReport(fields, geoByCode, scoutData!, officers),
+      build: () => buildScoutStatusReport(fields, geoByCode, scoutData!, officers, stageResolver),
       filenamePrefix: 'division_scout_status',
       sheetName: 'Scout Status',
     },
@@ -74,7 +76,7 @@ export function ExportModal({ fields, geoByCode, scoutData, officers, onClose }:
       label: 'Scout Visit & Impact',
       description: 'One row per scout visit — flagged issues, crop status at the time, and follow-up outcome.',
       needsScout: true,
-      build: () => buildScoutVisitImpactReport(fields, geoByCode, scoutData!, officers),
+      build: () => buildScoutVisitImpactReport(fields, geoByCode, scoutData!, officers, stageResolver),
       filenamePrefix: 'scout_visit_impact',
       sheetName: 'Scout Visit Impact',
     },

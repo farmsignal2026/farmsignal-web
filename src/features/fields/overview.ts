@@ -1,7 +1,11 @@
 import { areaFor } from './computeFieldStats'
 import { isFlagged, latestReport, scoutStatusForPlot, SCOUT_REASON_CATEGORIES, type ChecklistEntry } from './scoutAnalytics'
+import { stages, type GrowthStage } from './growthStage'
 import type { Field, FieldGeo } from './types'
 import type { ScoutData } from '../scout/types'
+
+type StageResolver = (factoryCode: string, clientCode: string | null) => GrowthStage[]
+const defaultStageResolver: StageResolver = () => stages
 
 /** Ports source's Overview / Executive Summary tab (RS_Cane_Monitoring_S1.html
  * `renderOverview()` + helpers, :3754-4140) — the primary landing page in
@@ -113,6 +117,7 @@ export function computeRelevantScoutStatus(
   geoByCode: Record<string, FieldGeo>,
   scoutData: ScoutData,
   groupKey: OverviewGroupKey,
+  stageResolver: StageResolver = defaultStageResolver,
 ): RelevantScoutStatusResult {
   const buckets: RelevantScoutStatusResult['buckets'] = {}
 
@@ -125,7 +130,13 @@ export function computeRelevantScoutStatus(
 
     const group = overviewGroupValue(field, groupKey)
     buckets[group] ??= { Unattended: 0, Scouted: 0, Overdue: 0, Closed: 0, 'Watch Worst': 0, total: 0 }
-    const status = scoutStatusForPlot(scoutData, field.code, geoByCode[field.code], field.plantDateRaw)
+    const status = scoutStatusForPlot(
+      scoutData,
+      field.code,
+      geoByCode[field.code],
+      field.plantDateRaw,
+      stageResolver(field.factoryCode, field.clientCode),
+    )
     buckets[group][status]++
     buckets[group].total++
   }

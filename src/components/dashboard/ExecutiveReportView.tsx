@@ -5,6 +5,7 @@ import { computeExecutiveReport, factoriesIn } from '../../features/fields/execu
 import { downloadExecutiveReportDocx } from '../../features/fields/executiveReportExport'
 import type { PlotScore } from '../../features/fields/aiInsights'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import type { ScoutData } from '../../features/scout/types'
 
 interface ExecutiveReportViewProps {
@@ -28,6 +29,7 @@ export function ExecutiveReportView({ fields, geoByCode, scoutData, onViewPlotsI
   const [selectedFactory, setSelectedFactory] = useState(factories[0] ?? '')
   const factory = factories.includes(selectedFactory) ? selectedFactory : factories[0]
   const [downloading, setDownloading] = useState(false)
+  const stageResolver = useStageResolver()
 
   const { trendStart, trendEnd } = useMemo(() => {
     const end = new Date()
@@ -37,8 +39,8 @@ export function ExecutiveReportView({ fields, geoByCode, scoutData, onViewPlotsI
 
   const report = useMemo(() => {
     if (!factory) return null
-    return computeExecutiveReport(factory, fields, geoByCode, scoutData, trendStart, trendEnd)
-  }, [factory, fields, geoByCode, scoutData, trendStart, trendEnd])
+    return computeExecutiveReport(factory, fields, geoByCode, scoutData, trendStart, trendEnd, stageResolver)
+  }, [factory, fields, geoByCode, scoutData, trendStart, trendEnd, stageResolver])
 
   if (factories.length === 0) {
     return <div className="p-6 text-center text-sm text-neutral-400">No factories in the current filter scope.</div>
@@ -50,6 +52,7 @@ export function ExecutiveReportView({ fields, geoByCode, scoutData, onViewPlotsI
         <div>
           <label className="mr-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Factory / Mill</label>
           <select
+            data-testid="exec-report-factory-select"
             value={factory}
             onChange={(e) => setSelectedFactory(e.target.value)}
             className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-700"
@@ -133,7 +136,7 @@ function SummarySection({ text }: { text: string }) {
   return (
     <div className="rounded-lg border border-neutral-100 bg-white p-4">
       <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">Summary</div>
-      <p className="text-sm leading-relaxed text-neutral-700">{text}</p>
+      <p data-report-summary className="text-sm leading-relaxed text-neutral-700">{text}</p>
     </div>
   )
 }

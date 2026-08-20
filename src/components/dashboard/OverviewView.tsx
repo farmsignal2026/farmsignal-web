@@ -12,6 +12,7 @@ import {
 } from '../../features/fields/overview'
 import { SCOUT_REASON_CATEGORIES, SCOUT_STATUS_COLOR, SCOUT_STATUSES } from '../../features/fields/scoutAnalytics'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import type { ScoutData } from '../../features/scout/types'
 
 interface OverviewViewProps {
@@ -46,9 +47,10 @@ export function OverviewView({ fields, geoByCode, scoutData, onViewGroupInCards 
   const coverage = useMemo(() => computePlotCoverage(fields), [fields])
   const health = useMemo(() => computeOverviewHealth(fields), [fields])
   const kpis = useMemo(() => computeScoutTrackingKPIs(fields, scoutData), [fields, scoutData])
+  const stageResolver = useStageResolver()
   const statusResult = useMemo(
-    () => computeRelevantScoutStatus(scopedFields, geoByCode, scoutData, effectiveGroupKey),
-    [scopedFields, geoByCode, scoutData, effectiveGroupKey],
+    () => computeRelevantScoutStatus(scopedFields, geoByCode, scoutData, effectiveGroupKey, stageResolver),
+    [scopedFields, geoByCode, scoutData, effectiveGroupKey, stageResolver],
   )
   const reasonRows = useMemo(
     () => computeOverviewReasons(scopedFields, scoutData, effectiveGroupKey),

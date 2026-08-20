@@ -39,6 +39,7 @@ export function TabBar({ active, onSelect }: TabBarProps) {
         <button
           key={tab.key}
           type="button"
+          data-tab-key={tab.key}
           onClick={() => onSelect(tab.key)}
           className={`rounded-t-md px-3 py-2 text-sm font-medium transition ${
             active === tab.key

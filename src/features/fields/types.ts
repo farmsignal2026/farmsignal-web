@@ -1,4 +1,4 @@
-import type { HealthStatus } from './growthStage'
+import type { GrowthStage, HealthStatus } from './growthStage'
 
 /** One row of `v_plots_current`, joined with farmer/factory/division lookups
  * — mirrors the Flutter `Field` domain model (fields/domain/field.dart). */
@@ -142,4 +142,11 @@ export interface FieldsLoadResult {
   /** True when the `get_plot_boundaries` RPC failed — every plot shows as
    * "Not Mapped" until a retry, not because it genuinely has no survey. */
   boundariesFailed: boolean
+  /** Resolved client/factory-level crop-stage thresholds (`thresholds.ts`),
+   * built once at load time — the same lookup `fieldsRepository.ts` itself
+   * uses for `FieldGeo.healthStatus`/`growthStage`, exposed here so UI
+   * components that independently recompute stage thresholds for their own
+   * display (e.g. the NDVI Trend chart's dashed threshold-range lines) stay
+   * consistent with it instead of falling back to the hardcoded default. */
+  stageResolver: (factoryCode: string, clientCode: string | null) => GrowthStage[]
 }

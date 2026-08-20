@@ -11,6 +11,7 @@ export interface AppUser {
   clientCode: string | null
   divisionCode: string | null
   divisionCodes: string[]
+  isSuperAdmin: boolean
 }
 
 export interface OfficerProfile {
@@ -22,6 +23,7 @@ export interface OfficerProfile {
   clientCode: string | null
   divisionCode: string | null
   divisionCodes: string[]
+  isSuperAdmin: boolean
 }
 
 export class AppAuthError extends Error {}

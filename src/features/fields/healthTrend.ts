@@ -1,5 +1,5 @@
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
-import { stageForAge, stages } from './growthStage'
+import { stageForAge, stages, type GrowthStage } from './growthStage'
 import { AGE_BUCKET_DAYS } from './plotTypeStyle'
 import { seasonLabelForYear, seasonStartYearFor } from './season'
 import type { Field, FieldGeo } from './types'
@@ -91,13 +91,17 @@ export function computeHealthTrend(
   start: Date,
   end: Date,
   track: TrendTrack,
+  stageResolver: (factoryCode: string, clientCode: string | null) => GrowthStage[] = () => stages,
 ): HealthTrendResult {
   const points = genDatePoints(start, end)
   if (points.length === 0) return { labels: [], series: [], totals: [] }
 
+  const stagesByField = new Map<string, GrowthStage[]>()
   const historyByField = new Map<string, ClassifiedObservation[]>()
   for (const field of fields) {
-    historyByField.set(field.code, classifyHistory(field, geoByCode[field.code]))
+    const resolved = stageResolver(field.factoryCode, field.clientCode)
+    stagesByField.set(field.code, resolved)
+    historyByField.set(field.code, classifyHistory(field, geoByCode[field.code], resolved))
   }
 
   const categoryKeys = track === 'health' ? HEALTH_CATS.map((c) => c.key) : stages.map((s) => s.name)
@@ -131,7 +135,7 @@ export function computeHealthTrend(
         if (track === 'health') {
           category = nearest.status === 'unknown' ? null : nearest.status
         } else {
-          category = stageForAge(nearest.age)?.stage.name ?? null
+          category = stageForAge(nearest.age, stagesByField.get(field.code))?.stage.name ?? null
         }
       }
 

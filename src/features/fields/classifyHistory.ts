@@ -1,4 +1,4 @@
-import { stageForAge, statusForNdvi, type HealthStatus } from './growthStage'
+import { stageForAge, stages, statusForNdvi, type GrowthStage, type HealthStatus } from './growthStage'
 import type { Field, FieldGeo } from './types'
 
 export interface ClassifiedObservation {
@@ -27,13 +27,17 @@ export interface ClassifiedObservation {
  * inline in `loadFieldDataFromSupabase()`/`renderChart()`
  * (RS_Cane_Monitoring_S1.html) applied across a field's whole history
  * instead of just its latest reading. */
-export function classifyHistory(field: Field, geo: FieldGeo | undefined): ClassifiedObservation[] {
+export function classifyHistory(
+  field: Field,
+  geo: FieldGeo | undefined,
+  stageTable: GrowthStage[] = stages,
+): ClassifiedObservation[] {
   const plantDate = field.plantDateRaw
   if (!geo || !plantDate) return []
 
   return geo.history.map((h) => {
     const age = Math.round((h.date.getTime() - plantDate.getTime()) / 86400000)
-    const sf = stageForAge(age)
+    const sf = stageForAge(age, stageTable)
     const status: HealthStatus = sf ? statusForNdvi(h.ndvi, sf.stage) : 'unknown'
     return {
       date: h.date,

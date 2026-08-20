@@ -5,7 +5,7 @@ import { computePlantingDateSuspicion, computeWeedSuspicion } from '../../featur
 import type { CompareGroupKey } from '../../features/fields/compare'
 import type { StatCardKey } from '../../features/fields/computeFieldStats'
 import { filterFields } from '../../features/fields/filterFields'
-import { useFieldsData, useGeoByCode, useScopedFields } from '../../features/fields/useFieldsData'
+import { useFieldsData, useGeoByCode, useScopedFields, useStageResolver } from '../../features/fields/useFieldsData'
 import { useOfficers } from '../../features/officers/useOfficers'
 import { DEFAULT_SCOUT_ANALYTICS_STATE, type ScoutAnalyticsState } from '../../features/fields/scoutAnalytics'
 import { useScoutData } from '../../features/scout/useScoutData'
@@ -34,6 +34,11 @@ const ScoutAnalyticsView = lazy(() => import('./ScoutAnalyticsView').then((m) =>
 const ExecutiveReportView = lazy(() => import('./ExecutiveReportView').then((m) => ({ default: m.ExecutiveReportView })))
 const ExportModal = lazy(() => import('./ExportModal').then((m) => ({ default: m.ExportModal })))
 const ImportFieldsModal = lazy(() => import('./ImportFieldsModal').then((m) => ({ default: m.ImportFieldsModal })))
+const ThresholdsModal = lazy(() => import('./ThresholdsModal').then((m) => ({ default: m.ThresholdsModal })))
+const ManageOfficersModal = lazy(() =>
+  import('./ManageOfficersModal').then((m) => ({ default: m.ManageOfficersModal })),
+)
+const MasterDataModal = lazy(() => import('./MasterDataModal').then((m) => ({ default: m.MasterDataModal })))
 
 function TabLoadingFallback() {
   return <div className="p-10 text-center text-sm text-neutral-400">Loading…</div>
@@ -47,6 +52,7 @@ export function DashboardShell() {
   const fieldsQuery = useFieldsData()
   const scopedFields = useScopedFields()
   const geoByCode = useGeoByCode()
+  const stageResolver = useStageResolver()
   const scoutQuery = useScoutData()
   const officersQuery = useOfficers()
 
@@ -61,9 +67,13 @@ export function DashboardShell() {
   const [manageAssignmentsOpen, setManageAssignmentsOpen] = useState(false)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [thresholdsModalOpen, setThresholdsModalOpen] = useState(false)
+  const [manageOfficersModalOpen, setManageOfficersModalOpen] = useState(false)
+  const [masterDataModalOpen, setMasterDataModalOpen] = useState(false)
   const [scoutAnalyticsState, setScoutAnalyticsState] = useState<ScoutAnalyticsState>(DEFAULT_SCOUT_ANALYTICS_STATE)
 
-  const canImportFields = user?.role === 'admin' || user?.role === 'manager'
+  const canImportFields = user?.isSuperAdmin ?? false
+  const isSuperAdmin = user?.isSuperAdmin ?? false
 
   // Sidebar-filtered only (no stat-card category applied) — the stat row
   // itself always reflects this, matching renderStats(filteredRows) in the
@@ -87,8 +97,8 @@ export function DashboardShell() {
   // "scout already cleared it" override); planting date doesn't.
   const weedSuspicionCodes = useMemo(() => {
     if (!scoutQuery.isSuccess) return new Set<string>()
-    return new Set(computeWeedSuspicion(filteredFields, geoByCode, scoutQuery.data).map((w) => w.field.code))
-  }, [filteredFields, geoByCode, scoutQuery.isSuccess, scoutQuery.data])
+    return new Set(computeWeedSuspicion(filteredFields, geoByCode, scoutQuery.data, stageResolver).map((w) => w.field.code))
+  }, [filteredFields, geoByCode, scoutQuery.isSuccess, scoutQuery.data, stageResolver])
   // Map (not just a Set) so the card alert can show WHICH of the two
   // planting-date signatures fired and why — a field flagged by the
   // late-immature-for-recorded-stage rule looks nothing like one flagged
@@ -98,9 +108,9 @@ export function DashboardShell() {
   // coming from the other one).
   const plantingSuspicionNotes = useMemo(() => {
     const map = new Map<string, string>()
-    for (const p of computePlantingDateSuspicion(filteredFields, geoByCode)) map.set(p.field.code, p.note)
+    for (const p of computePlantingDateSuspicion(filteredFields, geoByCode, stageResolver)) map.set(p.field.code, p.note)
     return map
-  }, [filteredFields, geoByCode])
+  }, [filteredFields, geoByCode, stageResolver])
 
   // Preserves every other sidebar filter (client/factory/division/etc.) —
   // only the plot-selection fields themselves get overwritten, clearing
@@ -267,6 +277,36 @@ export function DashboardShell() {
             title="Bulk-import new plots from a filled-in template"
           >
             ➕ Import Fields
+          </button>
+        )}
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setThresholdsModalOpen(true)}
+            className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+            title="Manage per-client/factory crop-stage NDVI thresholds"
+          >
+            ⚙️ Thresholds
+          </button>
+        )}
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setManageOfficersModalOpen(true)}
+            className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+            title="Edit officer roles/scope or deactivate a login"
+          >
+            👤 Manage Officers
+          </button>
+        )}
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setMasterDataModalOpen(true)}
+            className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+            title="Manage Factories/Divisions/Sections/Villages"
+          >
+            🗂️ Master Data
           </button>
         )}
         {officersQuery.isError && (
@@ -564,6 +604,39 @@ export function DashboardShell() {
             onClose={() => setImportModalOpen(false)}
             onImported={() => {
               setImportModalOpen(false)
+              queryClient.invalidateQueries({ queryKey: ['fields-data'] })
+            }}
+          />
+        </Suspense>
+      )}
+
+      {thresholdsModalOpen && (
+        <Suspense fallback={null}>
+          <ThresholdsModal
+            onClose={() => {
+              setThresholdsModalOpen(false)
+              queryClient.invalidateQueries({ queryKey: ['fields-data'] })
+            }}
+          />
+        </Suspense>
+      )}
+
+      {manageOfficersModalOpen && (
+        <Suspense fallback={null}>
+          <ManageOfficersModal
+            onClose={() => {
+              setManageOfficersModalOpen(false)
+              queryClient.invalidateQueries({ queryKey: ['officers'] })
+            }}
+          />
+        </Suspense>
+      )}
+
+      {masterDataModalOpen && (
+        <Suspense fallback={null}>
+          <MasterDataModal
+            onClose={() => {
+              setMasterDataModalOpen(false)
               queryClient.invalidateQueries({ queryKey: ['fields-data'] })
             }}
           />

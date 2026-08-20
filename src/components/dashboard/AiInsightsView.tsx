@@ -13,6 +13,7 @@ import {
 } from '../../features/fields/aiInsights'
 import { areaFor } from '../../features/fields/computeFieldStats'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import {
   buildChangeDetectionReport,
   buildFarmerPerformanceReport,
@@ -46,9 +47,16 @@ type SectionKey = 'change' | 'suspicion' | 'scout' | 'farmer' | 'plots'
  * headline) starts open; the rest start collapsed and the user expands
  * whichever they actually want, via its own header or the sticky nav. */
 export function AiInsightsView({ fields, geoByCode, scoutData, onViewPlotsInCards }: AiInsightsViewProps) {
+  const stageResolver = useStageResolver()
   const changeDetection = useMemo(() => computeChangeDetection(fields, geoByCode), [fields, geoByCode])
-  const weedSuspicion = useMemo(() => computeWeedSuspicion(fields, geoByCode, scoutData), [fields, geoByCode, scoutData])
-  const plantingSuspicion = useMemo(() => computePlantingDateSuspicion(fields, geoByCode), [fields, geoByCode])
+  const weedSuspicion = useMemo(
+    () => computeWeedSuspicion(fields, geoByCode, scoutData, stageResolver),
+    [fields, geoByCode, scoutData, stageResolver],
+  )
+  const plantingSuspicion = useMemo(
+    () => computePlantingDateSuspicion(fields, geoByCode, stageResolver),
+    [fields, geoByCode, stageResolver],
+  )
   const scoutRecommendations = useMemo(
     () => computeScoutRecommendation(fields, geoByCode, scoutData),
     [fields, geoByCode, scoutData],

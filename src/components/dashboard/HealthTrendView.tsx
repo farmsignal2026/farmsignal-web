@@ -5,6 +5,7 @@ import '../../lib/chartSetup'
 import { computeHealthTrend, computeHealthTrendYoY, type TrendTrack } from '../../features/fields/healthTrend'
 import { seasonLabelForYear } from '../../features/fields/season'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import { lineStyleLegendLabels } from '../../lib/chartLegend'
 import { downloadChartExcel, downloadChartPNG, printChartAsPDF } from '../../lib/exportUtils'
 import { ExportButtonRow } from './ExportButtonRow'
@@ -73,13 +74,14 @@ export function HealthTrendView({ fields, geoByCode, seasons }: HealthTrendViewP
     if (!startTouched) setStart(defaultStart(fields))
   }, [fields, startTouched])
 
+  const stageResolver = useStageResolver()
   const result = useMemo(() => {
     const startDate = new Date(start)
     const endDate = new Date(end)
     endDate.setHours(23, 59, 59)
     if (startDate > endDate) return null
-    return computeHealthTrend(fields, geoByCode, startDate, endDate, track)
-  }, [fields, geoByCode, start, end, track])
+    return computeHealthTrend(fields, geoByCode, startDate, endDate, track, stageResolver)
+  }, [fields, geoByCode, start, end, track, stageResolver])
 
   const isPct = viewAs === 'pct'
 

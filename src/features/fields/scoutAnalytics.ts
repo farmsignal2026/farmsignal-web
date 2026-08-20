@@ -1,7 +1,10 @@
 import type { ScoutData } from '../scout/types'
 import { COMPARE_GROUP_LABEL, groupValueFor, type CompareGroupKey } from './compare'
-import { hasNewAttentionAfter } from './growthStage'
+import { hasNewAttentionAfter, stages, type GrowthStage } from './growthStage'
 import type { Field, FieldGeo } from './types'
+
+type StageResolver = (factoryCode: string, clientCode: string | null) => GrowthStage[]
+const defaultStageResolver: StageResolver = () => stages
 
 /** The source HTML only offers 4 group-by dimensions here
  * (RS_Cane_Monitoring_S1.html:1248-1251), with Client/Factory conflated
@@ -95,10 +98,11 @@ export function scoutStatusForPlot(
   plotCode: string,
   geo: Pick<FieldGeo, 'history'> | undefined,
   plantDate: Date | null,
+  stageTable: GrowthStage[] = stages,
 ): ScoutStatus {
   const latest = latestReport(scoutData, plotCode)
   const newAttentionAfter = (cutoff: Date) =>
-    plantDate != null && geo != null ? hasNewAttentionAfter(geo.history, cutoff, plantDate) : false
+    plantDate != null && geo != null ? hasNewAttentionAfter(geo.history, cutoff, plantDate, stageTable) : false
   if (!latest) return 'Unattended'
   const followup = scoutData.followupsByReportId[latest.id]
   if (followup) {
@@ -150,13 +154,20 @@ export function computeScoutStatus(
   geoByCode: Record<string, FieldGeo>,
   groupKey: ScoutGroupKey,
   scoutData: ScoutData,
+  stageResolver: StageResolver = defaultStageResolver,
 ): GroupedResult {
   const buckets: Record<string, Record<string, number>> = {}
   const plotCodesByGroupCategory: Record<string, Record<string, string[]>> = {}
   for (const field of fields) {
     const group = groupValueFor(field, geoByCode, groupKey)
     buckets[group] ??= { Unattended: 0, Scouted: 0, Overdue: 0, Closed: 0, 'Watch Worst': 0, total: 0 }
-    const status = scoutStatusForPlot(scoutData, field.code, geoByCode[field.code], field.plantDateRaw)
+    const status = scoutStatusForPlot(
+      scoutData,
+      field.code,
+      geoByCode[field.code],
+      field.plantDateRaw,
+      stageResolver(field.factoryCode, field.clientCode),
+    )
     buckets[group][status]++
     buckets[group].total++
     addPlotCode(plotCodesByGroupCategory, group, status, field.code)

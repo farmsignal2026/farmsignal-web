@@ -39,6 +39,7 @@ async function hydrateUser(authUserId: string, email: string | null | undefined)
       clientCode: null,
       divisionCode: null,
       divisionCodes: [],
+      isSuperAdmin: true,
     }
   }
 
@@ -53,6 +54,7 @@ async function hydrateUser(authUserId: string, email: string | null | undefined)
     clientCode: officer.clientCode,
     divisionCode: officer.divisionCode,
     divisionCodes: officer.divisionCodes,
+    isSuperAdmin: officer.isSuperAdmin,
   }
 }
 

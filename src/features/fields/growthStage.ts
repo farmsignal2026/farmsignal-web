@@ -35,26 +35,32 @@ export interface StageForAgeResult {
 
 /** Clamps out-of-range ages to Maturity (beyond 360d, common for ratoon
  * cycles) or Germination (negative age, bad plant-date data) rather than
- * returning null and silently dropping the plot from classification. */
-export function stageForAge(age: number): StageForAgeResult | null {
+ * returning null and silently dropping the plot from classification.
+ *
+ * `stageTable` defaults to the hardcoded global `stages` — callers that
+ * have resolved a per-client/factory table (`thresholds.ts`,
+ * `resolveStagesForFactory`) pass it explicitly; everything that hasn't
+ * been migrated to per-client thresholds yet keeps working unchanged by
+ * omitting the argument. */
+export function stageForAge(age: number, stageTable: GrowthStage[] = stages): StageForAgeResult | null {
   let dayMin = 0
-  for (let i = 0; i < stages.length; i++) {
-    const s = stages[i]
+  for (let i = 0; i < stageTable.length; i++) {
+    const s = stageTable[i]
     if (age >= dayMin && age <= s.cumEnd) {
       return { stage: s, index: i, dayMin, dayMax: s.cumEnd }
     }
     dayMin = s.cumEnd
   }
-  if (age > stages[stages.length - 1].cumEnd) {
+  if (age > stageTable[stageTable.length - 1].cumEnd) {
     return {
-      stage: stages[stages.length - 1],
-      index: stages.length - 1,
-      dayMin: stages[stages.length - 2].cumEnd,
-      dayMax: stages[stages.length - 1].cumEnd,
+      stage: stageTable[stageTable.length - 1],
+      index: stageTable.length - 1,
+      dayMin: stageTable[stageTable.length - 2].cumEnd,
+      dayMax: stageTable[stageTable.length - 1].cumEnd,
     }
   }
   if (age < 0) {
-    return { stage: stages[0], index: 0, dayMin: 0, dayMax: stages[0].cumEnd }
+    return { stage: stageTable[0], index: 0, dayMin: 0, dayMax: stageTable[0].cumEnd }
   }
   return null
 }
@@ -76,7 +82,7 @@ export function statusForNdvi(ndvi: number, stage: GrowthStage): 'good' | 'optim
  * stage's own max-to-midpoint ratio (can exceed 100) rather than a flat
  * 100 — different purpose (aggregate stage comparison vs. one plot's
  * headline score), not a shared formula despite the visual similarity. */
-export function scoreForNdvi(ndvi: number, stage: GrowthStage): number {
+export function scoreForNdvi(ndvi: number, stage: Pick<GrowthStage, 'tMin' | 'tMax'>): number {
   const mid = (stage.tMin + stage.tMax) / 2
   if (!mid) return 0
   return Math.min(100, Math.round((ndvi / mid) * 100))
@@ -101,12 +107,17 @@ export interface NdviObservation {
  * (`crop_status='Same-Status'`, no decline at all); using overall current
  * health status there would have incorrectly reopened a genuinely fine
  * field as Unattended. */
-export function hasNewAttentionAfter(history: NdviObservation[], cutoff: Date, plantDate: Date): boolean {
+export function hasNewAttentionAfter(
+  history: NdviObservation[],
+  cutoff: Date,
+  plantDate: Date,
+  stageTable: GrowthStage[] = stages,
+): boolean {
   for (const h of history) {
     if (h.isLowConfidence || h.isS1) continue
     if (h.date <= cutoff) continue
     const age = Math.round((h.date.getTime() - plantDate.getTime()) / 86400000)
-    const sf = stageForAge(age)
+    const sf = stageForAge(age, stageTable)
     if (!sf) continue
     if (statusForNdvi(h.ndvi, sf.stage) === 'attention') return true
   }
@@ -116,13 +127,17 @@ export function hasNewAttentionAfter(history: NdviObservation[], cutoff: Date, p
 /** How many consecutive CONFIRMED (non-low-confidence, non-S1) observations
  * a field has been in "attention", walking back from the latest reading.
  * 1-2 stays "Need Attention"; 3+ escalates to "Need Serious Attention". */
-export function computeAttentionStreak(history: NdviObservation[], plantDate: Date): number {
+export function computeAttentionStreak(
+  history: NdviObservation[],
+  plantDate: Date,
+  stageTable: GrowthStage[] = stages,
+): number {
   let streak = 0
   for (let i = history.length - 1; i >= 0; i--) {
     const h = history[i]
     if (h.isLowConfidence || h.isS1) continue
     const age = Math.round((h.date.getTime() - plantDate.getTime()) / 86400000)
-    const sf = stageForAge(age)
+    const sf = stageForAge(age, stageTable)
     if (sf === null) break
     const status = statusForNdvi(h.ndvi, sf.stage)
     if (status === 'attention') {

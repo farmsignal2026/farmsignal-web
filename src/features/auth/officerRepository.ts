@@ -19,7 +19,7 @@ export class OfficerRepository {
   async fetchProfile(authUserId: string): Promise<OfficerProfile | null> {
     const { data: officers } = await this.client
       .from('farm_officers')
-      .select('id,name,role,factory_code,division_code,client_code')
+      .select('id,name,role,factory_code,division_code,client_code,is_super_admin')
       .eq('auth_user_id', authUserId)
       .eq('is_active', true)
       .limit(1)
@@ -69,6 +69,7 @@ export class OfficerRepository {
       clientCode,
       divisionCode: officerDivisionCode,
       divisionCodes,
+      isSuperAdmin: (officer.is_super_admin as boolean | null) ?? false,
     }
   }
 }

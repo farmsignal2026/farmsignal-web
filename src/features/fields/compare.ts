@@ -1,6 +1,9 @@
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
 import { areaFor } from './computeFieldStats'
-import { stageForAge, stages } from './growthStage'
+import { stageForAge, stages, type GrowthStage } from './growthStage'
+
+type StageResolver = (factoryCode: string, clientCode: string | null) => GrowthStage[]
+const defaultStageResolver: StageResolver = () => stages
 import { orderPlotTypes } from './plotTypeStyle'
 import { seasonLabelForYear, seasonStartYearFor } from './season'
 import type { Field, FieldGeo } from './types'
@@ -110,12 +113,13 @@ export function computeCompareCounts(
   groupKey: CompareGroupKey,
   start: Date,
   end: Date,
+  stageResolver: StageResolver = defaultStageResolver,
 ): CompareCountsResult {
   const buckets: Record<string, CompareBucket> = {}
 
   for (const field of fields) {
     const geo = geoByCode[field.code]
-    const rows = classifyHistory(field, geo)
+    const rows = classifyHistory(field, geo, stageResolver(field.factoryCode, field.clientCode))
     const result = latestInPeriod(rows, start, end)
     if (!result) continue
     const { observation, prev } = result
@@ -178,13 +182,15 @@ export function computeCompareStageMatrix(
   groupKey: CompareGroupKey,
   start: Date,
   end: Date,
+  stageResolver: StageResolver = defaultStageResolver,
 ): StageMatrixResult {
   const cells: Record<string, Record<string, StageCell>> = {}
   const meta: Record<string, { division: string; village: string }> = {}
 
   for (const field of fields) {
     const geo = geoByCode[field.code]
-    const rows = classifyHistory(field, geo)
+    const fieldStages = stageResolver(field.factoryCode, field.clientCode)
+    const rows = classifyHistory(field, geo, fieldStages)
     const group = groupValueFor(field, geoByCode, groupKey)
     meta[group] ??= { division: field.division, village: field.village }
     const areaAc = areaFor(field, geo)
@@ -192,7 +198,7 @@ export function computeCompareStageMatrix(
     for (const row of rows) {
       if (row.date < start || row.date > end) continue
       if (row.status === 'unknown') continue
-      const sf = stageForAge(row.age)
+      const sf = stageForAge(row.age, fieldStages)
       if (!sf) continue
 
       cells[group] ??= {}
@@ -224,6 +230,14 @@ export function computeCompareStageMatrix(
     }
   }
 
+  // Score math below deliberately still uses the global default `stages`
+  // (not a per-field resolved table) — a single "group" here (e.g. by
+  // client or variety) can span multiple factories with different
+  // thresholds, so there's no one field's table that's uniquely "correct"
+  // for an aggregate score across the whole group. The per-field/per-row
+  // classification above (good/moderate/attention counts and acreage) is
+  // already fully correct per client/factory; only this aggregate scoring
+  // step keeps using the shared reference thresholds.
   const scores: Record<string, number | null> = {}
   for (const group of Object.keys(cells)) {
     let sumScores = 0
@@ -265,6 +279,7 @@ export function computeCompareYoY(
   start: Date,
   end: Date,
   seasonYears: number[],
+  stageResolver: StageResolver = defaultStageResolver,
 ): CompareYoYResult {
   const sortedYears = [...seasonYears].sort((a, b) => a - b)
   const seasonSet = new Set(sortedYears)
@@ -275,7 +290,7 @@ export function computeCompareYoY(
     if (sy === null || !seasonSet.has(sy)) continue
 
     const geo = geoByCode[field.code]
-    const rows = classifyHistory(field, geo)
+    const rows = classifyHistory(field, geo, stageResolver(field.factoryCode, field.clientCode))
     const result = latestInPeriod(rows, start, end)
     if (!result) continue
     const { observation, prev } = result

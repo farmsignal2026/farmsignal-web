@@ -2,10 +2,13 @@ import type { ScoutData } from '../scout/types'
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
 import { nearestObs } from './healthTrend'
 import { isFlagged, latestReport, SCOUT_REASON_CATEGORIES, type ChecklistEntry } from './scoutAnalytics'
-import { scoreForNdvi, seriousStreakThreshold, stageForAge, stages, statusForNdvi } from './growthStage'
+import { scoreForNdvi, seriousStreakThreshold, stageForAge, stages, statusForNdvi, type GrowthStage } from './growthStage'
 import type { Field, FieldGeo } from './types'
 
 const DAY_MS = 86400000
+
+type StageResolver = (factoryCode: string, clientCode: string | null) => GrowthStage[]
+const defaultStageResolver: StageResolver = () => stages
 
 /** The latest CONFIRMED (non-S1/low-confidence) row, falling back to the
  * raw latest if every row is still unconfirmed — same "prefer confirmed"
@@ -117,14 +120,16 @@ export function computeWeedSuspicion(
   fields: Field[],
   geoByCode: Record<string, FieldGeo>,
   scoutData: ScoutData,
+  stageResolver: StageResolver = defaultStageResolver,
 ): WeedSuspicionEntry[] {
   const out: WeedSuspicionEntry[] = []
   for (const field of fields) {
     const geo = geoByCode[field.code]
-    const rows = classifyHistory(field, geo)
+    const fieldStages = stageResolver(field.factoryCode, field.clientCode)
+    const rows = classifyHistory(field, geo, fieldStages)
     const latest = latestConfirmed(rows)
     if (!latest || latest.age < 0 || latest.age > WEED_MAX_AGE) continue
-    const sf = stageForAge(latest.age)
+    const sf = stageForAge(latest.age, fieldStages)
     if (!sf) continue
     const excess = Number((latest.ndvi - sf.stage.tMax).toFixed(3))
     if (excess >= WEED_EXCESS_THRESHOLD) {
@@ -164,12 +169,14 @@ const IMMATURE_AGE_MAX = 150
 export function computePlantingDateSuspicion(
   fields: Field[],
   geoByCode: Record<string, FieldGeo>,
+  stageResolver: StageResolver = defaultStageResolver,
 ): PlantingDateSuspicionEntry[] {
   const out: PlantingDateSuspicionEntry[] = []
 
   for (const field of fields) {
     const geo = geoByCode[field.code]
-    const rows = classifyHistory(field, geo)
+    const fieldStages = stageResolver(field.factoryCode, field.clientCode)
+    const rows = classifyHistory(field, geo, fieldStages)
     if (rows.length === 0) continue
 
     // Signature 1 — simple rule per user, two independent conditions
@@ -186,11 +193,11 @@ export function computePlantingDateSuspicion(
     if (window.length > 0) {
       const beginning = window[0].ndvi
       const maxNdvi = Math.max(...window.map((r) => r.ndvi))
-      if (beginning > stages[0].tMax) {
+      if (beginning > fieldStages[0].tMax) {
         out.push({
           field,
           signature: 'early-residue',
-          note: `NDVI starts at ${beginning.toFixed(2)}, already above Germination's expected ceiling (${stages[0].tMax}) — looks like the previous crop was still standing when this plant date was recorded. True planting is likely later than recorded.`,
+          note: `NDVI starts at ${beginning.toFixed(2)}, already above Germination's expected ceiling (${fieldStages[0].tMax}) — looks like the previous crop was still standing when this plant date was recorded. True planting is likely later than recorded.`,
         })
         continue
       }
@@ -212,9 +219,9 @@ export function computePlantingDateSuspicion(
     if (field.healthStatus === 'attention') {
       const latest = latestConfirmed(rows)
       if (latest && latest.age >= IMMATURE_AGE_MIN && latest.age <= IMMATURE_AGE_MAX) {
-        const sf = stageForAge(latest.age)
+        const sf = stageForAge(latest.age, fieldStages)
         if (sf && sf.index > 0) {
-          const prevStage = stages[sf.index - 1]
+          const prevStage = fieldStages[sf.index - 1]
           const prevStatus = statusForNdvi(latest.ndvi, prevStage)
           if (prevStatus === 'good' || prevStatus === 'optimal') {
             out.push({
@@ -405,15 +412,24 @@ export interface PlotScore {
 
 /** One score per currently-monitored plot, via `scoreForNdvi()`
  * (growthStage.ts) — the per-plot headline score, distinct from Compare's
- * per-stage-cell aggregate score. */
+ * per-stage-cell aggregate score. Reads `geo.thresholdMin`/`thresholdMax`
+ * directly rather than re-resolving stages from scratch — those are
+ * already the correct client/factory-resolved values `fieldsRepository.ts`
+ * wrote for this exact field (a real bug until fixed 2026-08-19: this used
+ * to look the stage up in the global default `stages` array by name,
+ * silently using the wrong NDVI midpoint for any client/factory with
+ * overridden thresholds, even though `geo.growthStage`/`geo.ndvi`
+ * themselves were already correct). */
 export function computePlotScores(fields: Field[], geoByCode: Record<string, FieldGeo>): PlotScore[] {
   const out: PlotScore[] = []
   for (const field of fields) {
     const geo = geoByCode[field.code]
-    if (!geo || geo.ndvi == null || !geo.growthStage) continue
-    const stage = stages.find((s) => s.name === geo.growthStage)
-    if (!stage) continue
-    out.push({ field, score: scoreForNdvi(geo.ndvi, stage), stageName: stage.name })
+    if (!geo || geo.ndvi == null || !geo.growthStage || geo.thresholdMin == null || geo.thresholdMax == null) continue
+    out.push({
+      field,
+      score: scoreForNdvi(geo.ndvi, { tMin: geo.thresholdMin, tMax: geo.thresholdMax }),
+      stageName: geo.growthStage,
+    })
   }
   return out
 }

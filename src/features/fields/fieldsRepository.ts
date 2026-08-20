@@ -5,11 +5,13 @@ import {
   seriousStreakThreshold,
   spikeGuardLatest,
   stageForAge,
-  stages,
+  stages as DEFAULT_STAGES,
   statusForNdvi,
+  type GrowthStage,
   type HealthStatus,
   type NdviObservation,
 } from './growthStage'
+import { buildStageResolverCache, fetchThresholds } from './thresholds'
 import type {
   Field,
   FieldGeo,
@@ -85,13 +87,32 @@ export class FieldsRepository {
   }
 
   async loadFieldData(): Promise<FieldsLoadResult> {
-    const [divRes, secRes, vilRes, facRes, farRes] = await Promise.all([
+    const [divRes, secRes, vilRes, facRes, farRes, thresholdRows] = await Promise.all([
       this.client.from('divisions').select('code,name'),
       this.client.from('sections').select('code,name'),
       this.client.from('villages').select('code,name'),
       this.client.from('factories').select('code,name,group_code'),
       this.client.from('farmers').select('id,name,farmer_code,phone'),
+      fetchThresholds(this.client),
     ])
+
+    // One resolved GrowthStage[] per factory (client/factory-level
+    // overrides from crop_stage_thresholds, most-specific-wins, falling
+    // back to DEFAULT_STAGES for anything unconfigured) — built once here,
+    // not per field, since there are only ever a handful of factories.
+    // Hardcoded to 'Sugarcane' for now; see thresholds.ts's own note on
+    // why crop is an explicit parameter rather than an assumption baked
+    // into the resolver.
+    const stageResolverCache = buildStageResolverCache(
+      thresholdRows,
+      'Sugarcane',
+      (facRes.data ?? []).map((r) => ({
+        clientCode: (r.group_code as string | null) ?? null,
+        factoryCode: r.code as string,
+      })),
+    )
+    const resolvedStagesFor = (factoryCode: string, clientCode: string | null): GrowthStage[] =>
+      stageResolverCache.get(`${clientCode ?? ''}|${factoryCode}`) ?? DEFAULT_STAGES
 
     const divMap = Object.fromEntries((divRes.data ?? []).map((r) => [r.code as string, r.name as string]))
     const secMap = Object.fromEntries((secRes.data ?? []).map((r) => [r.code as string, r.name as string]))
@@ -294,6 +315,8 @@ export class FieldsRepository {
       const factoryCode = (p.factory_code as string | null) ?? ''
       const divisionCode = (p.division_code as string | null) ?? ''
       const areaAcres = p.area_acres
+      const clientCode = facClientMap[factoryCode] ?? null
+      const resolvedStages = resolvedStagesFor(factoryCode, clientCode)
 
       let healthStatus: HealthStatus = 'unknown'
       let needsScout = false
@@ -374,7 +397,7 @@ export class FieldsRepository {
         latestForAge ??= history[history.length - 1]
 
         const age = Math.round((latestForAge.date.getTime() - plantDate.getTime()) / 86400000)
-        const sf = stageForAge(age)
+        const sf = stageForAge(age, resolvedStages)
         if (sf) {
           const spike = spikeGuardLatest(history.map(toClassificationInput))
           growthStage = sf.stage.name
@@ -401,7 +424,7 @@ export class FieldsRepository {
             const latestConfNdvi = spike.observation.ndvi
             let status = statusForNdvi(latestConfNdvi, sf.stage)
             if (status === 'attention') {
-              const streak = computeAttentionStreak(history.map(toClassificationInput), plantDate)
+              const streak = computeAttentionStreak(history.map(toClassificationInput), plantDate, resolvedStages)
               attentionStreak = streak
               if (streak >= seriousStreakThreshold) {
                 healthStatus = 'serious'
@@ -428,8 +451,8 @@ export class FieldsRepository {
             needsScout = (healthStatus === 'attention' || healthStatus === 'serious') && !withinGracePeriod
           }
 
-          stageData = stages.map((s, i) => {
-            const dMin = i === 0 ? 0 : stages[i - 1].cumEnd
+          stageData = resolvedStages.map((s, i) => {
+            const dMin = i === 0 ? 0 : resolvedStages[i - 1].cumEnd
             const dMax = s.cumEnd
             if (dMin > age) return { ndvi: null, status: 'future' as const, current: false }
             let sum = 0
@@ -454,7 +477,7 @@ export class FieldsRepository {
         name: farmer ? ((farmer.name as string) ?? 'Unknown') : 'Unknown',
         factory: facMap[factoryCode] ?? factoryCode,
         factoryCode,
-        clientCode: facClientMap[factoryCode] ?? null,
+        clientCode,
         division: divMap[divisionCode] ?? divisionCode,
         divisionCode,
         section: secMap[(p.section_code as string | null) ?? ''] ?? ((p.section_code as string | null) ?? ''),
@@ -506,6 +529,6 @@ export class FieldsRepository {
       throw new Error('No plots returned from Supabase.')
     }
 
-    return { fields, geoData, scoutByPlot, boundariesFailed }
+    return { fields, geoData, scoutByPlot, boundariesFailed, stageResolver: resolvedStagesFor }
   }
 }

@@ -1,9 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { classifyHistory } from '../../features/fields/classifyHistory'
 import { stages } from '../../features/fields/growthStage'
-import type { HealthStatus } from '../../features/fields/growthStage'
+import type { GrowthStage, HealthStatus } from '../../features/fields/growthStage'
 import { HEALTH_COLOR_HEX, HEALTH_LABEL } from '../../features/fields/badgeStyles'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 
 interface StageSummaryViewProps {
   fields: Field[]
@@ -34,6 +35,7 @@ interface Segment {
 export function StageSummaryView({ fields, geoByCode, onViewPlotInCards, onViewPlotsInCards }: StageSummaryViewProps) {
   const [issuesSelected, setIssuesSelected] = useState<Set<string>>(new Set())
   const [goodSelected, setGoodSelected] = useState<Set<string>>(new Set())
+  const stageResolver = useStageResolver()
   const stageSegments = useMemo<Segment[]>(() => {
     const counts: Record<string, number> = {}
     for (const f of fields) {
@@ -66,11 +68,11 @@ export function StageSummaryView({ fields, geoByCode, onViewPlotInCards, onViewP
   const consistentGood = useMemo(() => {
     return fields
       .filter((f) => f.healthStatus === 'good')
-      .map((f) => ({ field: f, streak: computeGoodStreak(f, geoByCode[f.code]) }))
+      .map((f) => ({ field: f, streak: computeGoodStreak(f, geoByCode[f.code], stageResolver(f.factoryCode, f.clientCode)) }))
       .filter(({ streak }) => streak > 0)
       .sort((a, b) => b.streak - a.streak)
       .slice(0, 10)
-  }, [fields, geoByCode])
+  }, [fields, geoByCode, stageResolver])
 
   return (
     <div className="space-y-6 p-4">
@@ -248,8 +250,8 @@ function StreakList({
  * computed here from the read-only classified history rather than stored
  * on `FieldGeo`, since (unlike attentionStreak) no view needed a "good
  * streak" until now. */
-function computeGoodStreak(field: Field, geo: FieldGeo | undefined): number {
-  const rows = classifyHistory(field, geo)
+function computeGoodStreak(field: Field, geo: FieldGeo | undefined, stageTable: GrowthStage[]): number {
+  const rows = classifyHistory(field, geo, stageTable)
   let streak = 0
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i]

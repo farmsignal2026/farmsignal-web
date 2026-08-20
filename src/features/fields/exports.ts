@@ -10,7 +10,10 @@ import type {
 import { HEALTH_LABEL } from './badgeStyles'
 import { classifyHistory, type ClassifiedObservation } from './classifyHistory'
 import { areaFor } from './computeFieldStats'
-import { seriousStreakThreshold, stageForAge } from './growthStage'
+import { seriousStreakThreshold, stageForAge, stages, type GrowthStage } from './growthStage'
+
+type StageResolver = (factoryCode: string, clientCode: string | null) => GrowthStage[]
+const defaultStageResolver: StageResolver = () => stages
 import { isFlagged, latestReport, scoutStatusForPlot, SCOUT_REASON_CATEGORIES, type ChecklistEntry } from './scoutAnalytics'
 import type { Field, FieldGeo } from './types'
 import { recommendationGiven, type ScoutData } from '../scout/types'
@@ -29,14 +32,19 @@ function num(n: number, dp = 3): number {
 // A1. Detail — one row per CONFIRMED satellite observation.
 // ---------------------------------------------------------------------------
 
-export function buildDetailReport(fields: Field[], geoByCode: Record<string, FieldGeo>): Record<string, unknown>[] {
+export function buildDetailReport(
+  fields: Field[],
+  geoByCode: Record<string, FieldGeo>,
+  stageResolver: StageResolver = defaultStageResolver,
+): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = []
   for (const field of fields) {
     const geo = geoByCode[field.code]
-    const history = classifyHistory(field, geo)
+    const fieldStages = stageResolver(field.factoryCode, field.clientCode)
+    const history = classifyHistory(field, geo, fieldStages)
     for (const row of history) {
       if (row.isUnconfirmed) continue
-      const sf = stageForAge(row.age)
+      const sf = stageForAge(row.age, fieldStages)
       rows.push({
         Farmer: field.name,
         Client: field.clientCode ?? '',
@@ -65,14 +73,19 @@ export function buildDetailReport(fields: Field[], geoByCode: Record<string, Fie
 // with A1 so pivoting A1 reproduces these same season stats).
 // ---------------------------------------------------------------------------
 
-export function buildSummaryReport(fields: Field[], geoByCode: Record<string, FieldGeo>): Record<string, unknown>[] {
+export function buildSummaryReport(
+  fields: Field[],
+  geoByCode: Record<string, FieldGeo>,
+  stageResolver: StageResolver = defaultStageResolver,
+): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = []
   for (const field of fields) {
     const geo = geoByCode[field.code]
-    const history = classifyHistory(field, geo).filter((r) => !r.isUnconfirmed)
+    const fieldStages = stageResolver(field.factoryCode, field.clientCode)
+    const history = classifyHistory(field, geo, fieldStages).filter((r) => !r.isUnconfirmed)
     if (history.length === 0) continue
     const latest = history[history.length - 1]
-    const sf = stageForAge(latest.age)
+    const sf = stageForAge(latest.age, fieldStages)
     const ndvis = history.map((r) => r.ndvi)
     const good = history.filter((r) => r.status === 'good').length
     const moderate = history.filter((r) => r.status === 'optimal').length
@@ -255,6 +268,7 @@ export function buildScoutStatusReport(
   geoByCode: Record<string, FieldGeo>,
   scoutData: ScoutData,
   officers: Officer[],
+  stageResolver: StageResolver = defaultStageResolver,
 ): Record<string, unknown>[] {
   const officerById = new Map(officers.map((o) => [o.id, o]))
 
@@ -267,7 +281,13 @@ export function buildScoutStatusReport(
         Division: field.division,
         'Client/Mill': field.clientCode ?? '',
         Farmer: field.name,
-        'Scout Status': scoutStatusForPlot(scoutData, field.code, geoByCode[field.code], field.plantDateRaw),
+        'Scout Status': scoutStatusForPlot(
+          scoutData,
+          field.code,
+          geoByCode[field.code],
+          field.plantDateRaw,
+          stageResolver(field.factoryCode, field.clientCode),
+        ),
         Officer: officer?.name ?? (report ? 'Unknown' : ''),
         'Date of Scout': report?.visitDate ?? '',
       }
@@ -329,6 +349,7 @@ export function buildScoutVisitImpactReport(
   geoByCode: Record<string, FieldGeo>,
   scoutData: ScoutData,
   officers: Officer[],
+  stageResolver: StageResolver = defaultStageResolver,
 ): Record<string, unknown>[] {
   const officerById = new Map(officers.map((o) => [o.id, o]))
   const rows: Record<string, unknown>[] = []
@@ -336,7 +357,7 @@ export function buildScoutVisitImpactReport(
   for (const field of fields) {
     const reports = scoutData.reportsByPlot[field.code]
     if (!reports || reports.length === 0) continue
-    const history = classifyHistory(field, geoByCode[field.code])
+    const history = classifyHistory(field, geoByCode[field.code], stageResolver(field.factoryCode, field.clientCode))
     const sorted = [...reports].sort((a, b) => a.visitDate.getTime() - b.visitDate.getTime())
 
     sorted.forEach((report, idx) => {

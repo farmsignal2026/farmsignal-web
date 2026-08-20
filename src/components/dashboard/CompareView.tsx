@@ -11,6 +11,7 @@ import {
 } from '../../features/fields/compare'
 import { seasonLabelForYear } from '../../features/fields/season'
 import type { Field, FieldGeo } from '../../features/fields/types'
+import { useStageResolver } from '../../features/fields/useFieldsData'
 import '../../lib/chartSetup'
 import { lineStyleLegendLabels } from '../../lib/chartLegend'
 import { downloadChartExcel, downloadChartPNG, downloadXLSX, printChartAsPDF, printTableAsPDF } from '../../lib/exportUtils'
@@ -95,26 +96,30 @@ export function CompareView({ fields, geoByCode, seasons, onViewGroupInCards }: 
   }, [start, end])
 
   const rangeValid = startDate <= endDate
+  const stageResolver = useStageResolver()
 
   const counts = useMemo(
-    () => (rangeValid && (viewAs === 'count' || viewAs === 'pct') ? computeCompareCounts(fields, geoByCode, groupKey, startDate, endDate) : null),
-    [rangeValid, viewAs, fields, geoByCode, groupKey, startDate, endDate],
+    () =>
+      rangeValid && (viewAs === 'count' || viewAs === 'pct')
+        ? computeCompareCounts(fields, geoByCode, groupKey, startDate, endDate, stageResolver)
+        : null,
+    [rangeValid, viewAs, fields, geoByCode, groupKey, startDate, endDate, stageResolver],
   )
 
   const matrix = useMemo(
     () =>
       rangeValid && viewAs === 'matrix' && groupKey !== 'stage'
-        ? computeCompareStageMatrix(fields, geoByCode, groupKey, startDate, endDate)
+        ? computeCompareStageMatrix(fields, geoByCode, groupKey, startDate, endDate, stageResolver)
         : null,
-    [rangeValid, viewAs, groupKey, fields, geoByCode, startDate, endDate],
+    [rangeValid, viewAs, groupKey, fields, geoByCode, startDate, endDate, stageResolver],
   )
 
   const yoy = useMemo(
     () =>
       rangeValid && viewAs === 'yoy' && yoyEnabled
-        ? computeCompareYoY(fields, geoByCode, groupKey, startDate, endDate, seasons.map(Number))
+        ? computeCompareYoY(fields, geoByCode, groupKey, startDate, endDate, seasons.map(Number), stageResolver)
         : null,
-    [rangeValid, viewAs, yoyEnabled, fields, geoByCode, groupKey, startDate, endDate, seasons],
+    [rangeValid, viewAs, yoyEnabled, fields, geoByCode, groupKey, startDate, endDate, seasons, stageResolver],
   )
 
   const sortedMatrixGroups = useMemo(() => {

@@ -156,49 +156,23 @@ export interface SpikeGuardResult {
 const SPIKE_DROP = 0.15
 
 /** Ports "SPIKE GUARD WITH ESCALATION" (RS_Cane_Monitoring_S1.html:
- * 2764-2808) — Pass 1 flags any otherwise-confirmed reading that drops
- * >=0.15 NDVI from the last confirmed baseline as low-confidence (the
- * baseline doesn't advance past a flagged row, so a run of drops all
- * compare against the same pre-drop peak).
- *
- * Two escalation passes then decide which flagged drops are a real,
- * sustained decline rather than cloud/sensor noise on a single reading:
- *
- * Pass 2a (adjacent pair, close to EACH OTHER): if two ADJACENT flagged
- * readings land within 0.15 of each other — including an S1 estimate as a
- * valid confirming partner — that pairing itself is the confirmation;
- * restore both. Catches a drop that's immediately followed by a second
- * reading landing at roughly the same lower level.
- *
- * Pass 2b (2+ consecutive drops from the same baseline, added 2026-08-20):
- * catches the gap Pass 2a leaves — a genuinely worsening field whose
- * readings keep sliding to DIFFERENT low values (e.g. 0.62 then 0.19)
- * rather than landing twice at the same spot never satisfies 2a's
- * "close to each other" test, so it stayed "unconfirmed" and the field
- * kept showing its old, healthy status indefinitely. Real case: plot
- * 8000787637 (Erullappan) sat at "Good" off a month-old 0.84 reading while
- * its two latest readings (0.62, then 0.19 — neither harvest nor a data
- * gap, confirmed via plot_seasons.harvest_date being null) sat unconfirmed.
- * Any run of 2+ CONSECUTIVE non-S1 readings still flagged from Pass 1 —
- * regardless of how close they are to each other, only that each is
- * independently >=0.15 below the SAME pre-drop baseline — is treated as
- * confirmed. A single isolated flagged reading still stays unconfirmed,
- * preserving the original single-blip noise rejection. S1 estimates are
- * transparent to this pass (as in Pass 1) — they neither extend nor break
- * a run of real readings. Runs before Pass 2a so a 3+ run isn't partially
- * claimed by 2a's pairwise check first (2a pairing off two of three would
- * leave the third looking "isolated" to 2b).
- *
- * Both escalation passes treat the series' very last reading as eligible —
- * a genuine decline landing on the newest reading CAN still be confirmed.
- * A single-pass "does the next reading confirm this one" check (this
- * function's earlier form) cannot do that: the newest reading has no
- * "next" to confirm it, so any real decline that happens to be the latest
- * available data would stay "unconfirmed" forever and the field would
- * keep showing its old, better status — a real bug found via a live field
- * where this app showed "Good" (NDVI 0.74, a month-old peak) while the
- * source dashboard correctly showed "Need attention" (NDVI 0.41, the
- * actual latest reading). */
+ * 2764-2808) — two passes over a field's full ascending-date history:
+ * Pass 1 flags any otherwise-confirmed reading that drops >=0.15 NDVI from
+ * the last confirmed baseline as low-confidence (the baseline doesn't
+ * advance past a flagged row, so a run of drops all compare against the
+ * same pre-drop peak). Pass 2 (escalation): for each ADJACENT pair that
+ * are both low-confidence and within 0.15 of each other, that's a
+ * sustained real decline, not cloud/sensor noise — restore both to
+ * confirmed. Crucially, Pass 2 treats the series' very last reading as a
+ * valid `curr` in a pair with its predecessor — a genuine decline landing
+ * on the newest reading CAN still be confirmed. A single-pass "does the
+ * next reading confirm this one" check (this function's earlier form)
+ * cannot do that: the newest reading has no "next" to confirm it, so any
+ * real decline that happens to be the latest available data would stay
+ * "unconfirmed" forever and the field would keep showing its old, better
+ * status — a real bug found via a live field where this app showed "Good"
+ * (NDVI 0.74, a month-old peak) while the source dashboard correctly
+ * showed "Need attention" (NDVI 0.41, the actual latest reading). */
 export function applySpikeGuardEscalation<T extends { ndvi: number; isLowConfidence: boolean; isS1: boolean }>(
   history: T[],
 ): T[] {
@@ -214,23 +188,6 @@ export function applySpikeGuardEscalation<T extends { ndvi: number; isLowConfide
     }
   }
 
-  // Pass 2b — run before 2a, see docstring.
-  const realIndices = rows.map((r, i) => (r.isS1 ? -1 : i)).filter((i) => i !== -1)
-  let runStart = -1
-  for (let k = 0; k <= realIndices.length; k++) {
-    const idx = k < realIndices.length ? realIndices[k] : -1
-    const inRun = idx !== -1 && rows[idx].isLowConfidence
-    if (inRun) {
-      if (runStart === -1) runStart = k
-    } else {
-      if (runStart !== -1 && k - runStart >= 2) {
-        for (let m = runStart; m < k; m++) rows[realIndices[m]].isLowConfidence = false
-      }
-      runStart = -1
-    }
-  }
-
-  // Pass 2a
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1]
     const curr = rows[i]
